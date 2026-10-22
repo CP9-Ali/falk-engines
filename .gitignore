@@ -45,3 +45,8 @@ coverage/
 *.local.ts
 *.local.json
 .github/workflows/*.local.yml
+
+# WORM backups (local, never commit)
+backups/
+
+backups/

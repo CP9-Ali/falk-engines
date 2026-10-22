@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+﻿import { createHash } from 'node:crypto';
 import type { AuditLog } from '../audit/audit-log';
 import { newId } from '../core/ids';
 import { now } from '../core/time';
