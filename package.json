@@ -9,6 +9,7 @@
   "test:watch": "vitest",
   "demo": "tsx src/demo.ts",
   "live": "tsx src/live-demo.ts",
+  "live-pipeline": "tsx src/live-pipeline-demo.ts",
   "worm-demo": "tsx src/local-worm-demo.ts",
   "worm-verify": "tsx src/worm-verify.ts",
   "worm-demo": "tsx src/local-worm-demo.ts",

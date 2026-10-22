@@ -16,29 +16,28 @@ interface BinanceKlineMessage {
   };
 }
 
+export type BinanceInterval = '1m' | '3m' | '5m' | '15m' | '1h';
+
 export interface BinanceLiveConfig {
   readonly symbol: string;
+  readonly interval?: BinanceInterval;
   readonly emitInProgress?: boolean;
   readonly onPoint: (p: RawDataPoint<Candle>) => void | Promise<void>;
 }
 
-/**
- * ß14: »Ì«‰«  Binance ÕÌ….
- * - «·«› —«÷Ì: «·‘„Ê⁄ «·„€·ﬁ… ›ﬁÿ (no lookahead)
- * - emitInProgress=true: «·‘„Ê⁄ ﬁÌœ «· ﬂÊ¯‰ √Ì÷« (··„—«ﬁ»…)
- */
 export class BinanceLiveSource implements LiveSource {
   private ws?: WebSocket;
 
   constructor(private readonly cfg: BinanceLiveConfig) {}
 
   async start(): Promise<void> {
-    const url = `wss://stream.binance.com:9443/ws/${this.cfg.symbol}@kline_1h`;
+    const interval = this.cfg.interval ?? '1m';
+    const url = `wss://stream.binance.com:9443/ws/${this.cfg.symbol}@kline_${interval}`;
     this.ws = new WebSocket(url);
 
     return new Promise((resolve, reject) => {
       this.ws!.on('open', () => {
-        console.log(`[binance] connected: ${this.cfg.symbol}`);
+        console.log(`[binance] connected: ${this.cfg.symbol} @ ${interval}`);
         resolve();
       });
 
