@@ -1,5 +1,47 @@
+﻿# Dependencies
 node_modules/
+package-lock.json.bak
+
+# Builds
 dist/
+build/
+*.tsbuildinfo
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+secrets/
+.secrets/
+
+# Logs & temp
 *.log
+logs/
+tmp/
+temp/
 .DS_Store
+Thumbs.db
+
+# Test outputs
+coverage/
+.nyc_output/
+
+# IDE
+.vscode/settings.json
+.idea/
+*.swp
+*.swo
+
+# Archives
 *.zip
+*.tar.gz
+*.tgz
+
+# Local overrides
+*.local.ts
+*.local.json
+.github/workflows/*.local.yml
