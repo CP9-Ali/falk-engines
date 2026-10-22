@@ -1,8 +1,0 @@
-{
-  "snapshotId": "snap_019ba22c-e025-4428-bbd7-149b54a72213",
-  "kind": "INCREMENTAL",
-  "payload": "{\"candle\":{\"sourceId\":\"binance\",\"value\":{\"open\":81061.92,\"high\":81090.97,\"low\":81011,\"close\":81044.69,\"volume\":47.44403},\"eventTime\":\"2026-10-22T16:51:00.000Z\",\"closedAt\":\"2026-10-22T16:52:00.000Z\",\"arrivalTime\":\"2026-10-22T16:57:33.973Z\",\"availabilityTime\":\"2026-10-22T16:52:00.000Z\",\"version\":1,\"fingerprint\":\"btcusdt-1792687860000\"},\"features\":{\"sma20\":null,\"rsi14\":null,\"atr14\":null},\"executionStatus\":\"INSUFFICIENT_DATA\"}",
-  "payloadHash": "9d7bee8fba58def4d4e5f858b25ae6788efcc9cadbafef1961b244263c36ab79",
-  "createdAt": "2026-10-22T16:57:33.977Z",
-  "parentSnapshotId": "snap_1910a584-b249-4d7a-8a9a-26a9bce7423b"
-}
