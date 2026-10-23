@@ -18,14 +18,14 @@ export interface EvidenceChain {
 }
 
 export class EvidenceBuilder {
-  /** §Evidence: بناء سلسلة الأدلة من raw → normalized → feature */
+  /** آ§Evidence: ط¨ظ†ط§ط، ط³ظ„ط³ظ„ط© ط§ظ„ط£ط¯ظ„ط© ظ…ظ† raw â†’ normalized â†’ feature */
   build(
     feature: FeatureComputeResult,
     canonical: CanonicalCandle,
   ): EvidenceChain {
     const nodes: EvidenceNode[] = [];
 
-    // 1. raw node — نتحقق من وجود الملف
+    // 1. raw node â€” ظ†طھط­ظ‚ظ‚ ظ…ظ† ظˆط¬ظˆط¯ ط§ظ„ظ…ظ„ظپ
     const rawExists = existsSync(canonical.raw_payload_ref);
     let rawHash = 'unknown';
     if (rawExists) {
@@ -71,4 +71,40 @@ export class EvidenceBuilder {
       complete,
     };
   }
+}
+/**
+ * §12: Evidence Snapshot — لقطة أدلة موحّدة لشمعة واحدة.
+ * تجمع كل السلاسل (لكل feature) في أثر واحد قابل للحفظ.
+ */
+export interface EvidenceSnapshot {
+  readonly snapshot_id: string;
+  readonly candle_fingerprint: string;
+  readonly timeframe: string;
+  readonly event_time_utc: string;
+  readonly chains: ReadonlyArray<EvidenceChain>;
+  readonly chains_complete: number;
+  readonly chains_incomplete: number;
+  readonly complete: boolean;
+  readonly captured_at_utc: string;
+}
+
+export function buildEvidenceSnapshot(
+  candleFingerprint: string,
+  timeframe: string,
+  eventTimeUtc: string,
+  chains: ReadonlyArray<EvidenceChain>,
+): EvidenceSnapshot {
+  const completeCount = chains.filter(c => c.complete).length;
+  const incompleteCount = chains.length - completeCount;
+  return {
+    snapshot_id: 'esnap-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+    candle_fingerprint: candleFingerprint,
+    timeframe,
+    event_time_utc: eventTimeUtc,
+    chains,
+    chains_complete: completeCount,
+    chains_incomplete: incompleteCount,
+    complete: chains.length > 0 && incompleteCount === 0,
+    captured_at_utc: new Date().toISOString(),
+  };
 }

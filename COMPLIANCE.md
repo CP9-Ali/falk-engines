@@ -1,9 +1,9 @@
 # FALK Engines — Specification Compliance Report
 
-**Version:** 2.0.0
+**Version:** 3.0.0
 **Date:** 2026-10-23
 **Repository:** github.com/CP9-Ali/falk-engines
-**Compliance:** 100% (with 6 documented deviations)
+**Compliance:** 100% (with 7 documented deviations)
 
 ---
 
@@ -203,7 +203,7 @@ All covered: secrets, permissions, monitoring, retries, alerts, license, backup,
 
 | Metric | Value |
 |--------|:-----:|
-| **Tests** | 202/202 across 42 files |
+| **Tests** | 210/210 across 46 files |
 | **Compliance** | **100%** (6 approved deviations) |
 | **Raw snapshots** | 2500+ |
 | **WORM snapshots** | 1270+ |

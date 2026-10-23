@@ -1,33 +1,34 @@
 {
-  "name": "falk-engines",
-  "version": "1.0.0",
-  "description": "FALK Data Quality / Fusion / Feature Engineering engines",
-  "type": "module",
-  "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "demo": "tsx src/demo.ts",
-    "backup-demo": "tsx src/backup-demo.ts",
-    "live": "tsx src/live-direct.ts",
-    "start": "tsx src/live-gold.ts",
-    "replay": "tsx src/replay-cli.ts",
-    "health": "powershell -ExecutionPolicy Bypass -File scripts/health-check.ps1",
-    "acceptance": "tsx src/acceptance-cli.ts"
-  },
-  "devDependencies": {
-    "@types/express": "^4.17.25",
-    "@types/node": "^20.11.0",
-    "@types/ws": "^8.5.12",
-    "tsx": "^4.7.0",
-    "typescript": "^5.4.0",
-    "vitest": "^1.4.0"
-  },
-  "dependencies": {
-    "csv-parse": "^5.5.6",
-    "dotenv": "^16.4.5",
-    "express": "^4.22.3",
-    "jose": "^5.9.6",
-    "ws": "^8.18.0"
-  }
+    "name":  "falk-engines",
+    "version":  "1.0.0",
+    "description":  "FALK Data Quality / Fusion / Feature Engineering engines",
+    "type":  "module",
+    "scripts":  {
+                    "build":  "tsc -p tsconfig.json",
+                    "test":  "vitest run",
+                    "test:watch":  "vitest",
+                    "demo":  "tsx src/demo.ts",
+                    "backup-demo":  "tsx src/backup-demo.ts",
+                    "live":  "tsx src/live-direct.ts",
+                    "start":  "tsx src/live-gold.ts",
+                    "replay":  "tsx src/replay-cli.ts",
+                    "health":  "powershell -ExecutionPolicy Bypass -File scripts/health-check.ps1",
+                    "acceptance":  "tsx src/acceptance-cli.ts",
+                    "replay-compare":  "tsx src/replay-compare.ts"
+                },
+    "devDependencies":  {
+                            "@types/express":  "^4.17.25",
+                            "@types/node":  "^20.11.0",
+                            "@types/ws":  "^8.5.12",
+                            "tsx":  "^4.7.0",
+                            "typescript":  "^5.4.0",
+                            "vitest":  "^1.4.0"
+                        },
+    "dependencies":  {
+                         "csv-parse":  "^5.5.6",
+                         "dotenv":  "^16.4.5",
+                         "express":  "^4.22.3",
+                         "jose":  "^5.9.6",
+                         "ws":  "^8.18.0"
+                     }
 }

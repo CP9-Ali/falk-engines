@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { HashChainAuditLog } from '../audit/audit-log';
+import { assessUsability } from '../normalization/canonical';
 import { SchemaValidator } from '../contracts/schema-validator';
 import { SecretsManager, InMemorySecrets } from '../security/secrets';
 import { ConfigChangeLog } from '../security/config-change-log';

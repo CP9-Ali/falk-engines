@@ -92,4 +92,21 @@ This document records **deliberate deviations** from `FALK_Data_Engines_Detailed
 | 5 | No Level-2 | âœ… |
 | 6 | Analysis only | âœ… |
 
-**6 active deviations, all approved and documented. H3 now fully implemented.**
+### Deviation 7 — H1 not built from M5
+
+**Spec (§10)**: "ÅĞÇ Èõäí H1 ãä M5¡ íÌÈ ÊæËíŞ ÍÏæÏ ÇáÓÇÚÉ æØÑíŞÉ ÇáÊÚÇãá ãÚ M5 ÇáäÇŞÕÉ"
+**Implementation**: We use `1h` directly from TwelveData, not aggregated from M5.
+
+**Justification:**
+- TwelveData provides H1 as a first-class timeframe with verified OHLC.
+- Aggregating H1 from 5m would require 12 consecutive 5m candles per bucket, introducing 12× the fail points.
+- H3 requires aggregation because TwelveData does not provide it. H1 does not.
+- The spec's requirement is conditional: "**ÅĞÇ** Èõäí H1 ãä M5" — since we don't build it, the requirement is not triggered.
+
+**Impact:** H1 is directly verified from source, not derived. This is arguably stronger than aggregation.
+
+**Approved by**: Project owner.
+
+---
+
+**7 active deviations, all approved and documented. H3 fully implemented.**

@@ -129,11 +129,12 @@ export interface UsabilityReport {
     readonly source_comparison: boolean;
     readonly delta_cvd: boolean;
     readonly order_flow: boolean;
+    readonly news_analysis: boolean;
   };
   readonly reasons: ReadonlyArray<string>;
 }
 
-export function assessUsability(c: CanonicalCandle): UsabilityReport {
+export function assessUsability(c: CanonicalCandle, opts?: { newsAvailable?: boolean; newsPublishedAt?: string; eventTime?: string }): UsabilityReport {
   const reasons: string[] = [];
   const ohlcValid =
     Number.isFinite(c.open) && Number.isFinite(c.high) &&
@@ -152,6 +153,7 @@ export function assessUsability(c: CanonicalCandle): UsabilityReport {
       source_comparison: ohlcValid,
       delta_cvd: false,
       order_flow: false,
+      news_analysis: opts?.newsAvailable === true && opts?.newsPublishedAt !== undefined && opts?.eventTime !== undefined && new Date(opts.newsPublishedAt).getTime() <= new Date(opts.eventTime).getTime(),
     },
     reasons,
   };

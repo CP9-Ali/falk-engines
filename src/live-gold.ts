@@ -29,6 +29,13 @@ import { RunContextStore } from './replay/run-context';
 import { HistoryRestorer } from './ingestion/history-restorer';
 import { EngineResultsLog } from './replay/engine-results';
 import { H3Aggregator } from './ingestion/h3-aggregator';
+import { GapFixer } from './ingestion/gap-fixer';
+import { ErrorQueue } from './ingestion/error-queue';
+import { RateLimitManager } from './ingestion/rate-limiter';
+import { AlertManager } from './monitoring/alerts';
+import { HealthMonitor } from './monitoring/health-monitor';
+import { AlertBridge } from './monitoring/alert-bridge';
+import { buildEvidenceSnapshot } from './evidence/evidence-chain';
 import type { RawDataPoint } from './core/types';
 import type { Candle } from './data-quality/checks/base';
 import type { FeatureComputeResult } from './feature-engineering/types';
@@ -87,6 +94,12 @@ async function main() {
   const conflictLog = new ConflictLog('.backup/conflicts');
   const engineResults = new EngineResultsLog('.backup/engine-runs');
   const h3Aggregator = new H3Aggregator();
+  const errorQueue = new ErrorQueue('.backup/errors');
+  const gapFixer = new GapFixer('twelvedata-ws', '1m', 60_000, errorQueue);
+  const alertMgr = new AlertManager(audit);
+  const healthMon = new HealthMonitor(new RateLimitManager(), errorQueue, ['twelvedata-ws', 'binance-paxg', 'xaus-api']);
+  const alertBridge = new AlertBridge(healthMon, alertMgr, 'live-runner', { pollMs: 60_000 });
+  alertBridge.start();
   const reg = new FeatureRegistry();
 
   for (const tf of TIMEFRAMES) {
