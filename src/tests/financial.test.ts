@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import { HashChainAuditLog } from '../audit/audit-log';
 import { FeatureEngineeringEngine } from '../feature-engineering/engine';
 import { FeatureRegistry } from '../feature-engineering/registry';
@@ -17,8 +17,11 @@ const candle = (h: number, close: number): RawDataPoint<Candle> => ({
 
 const run = (featureId: string, points: RawDataPoint<Candle>[], cutoff: string) => {
   const reg = new FeatureRegistry();
-  reg.register(sma20); reg.register(ema20); reg.register(rsi14);
-  reg.register(atr14); reg.register(volatility20);
+  reg.register(sma20);
+  reg.register(ema20);
+  reg.register(rsi14);
+  reg.register(atr14);
+  reg.register(volatility20);
   const fe = new FeatureEngineeringEngine(reg,
     { engineVersion: '1', policyVersion: 'p', configVersion: 'c' },
     new HashChainAuditLog());
@@ -35,45 +38,44 @@ const run = (featureId: string, points: RawDataPoint<Candle>[], cutoff: string) 
 describe('Financial features', () => {
   it('sma20 on flat prices = flat value', () => {
     const points = Array.from({ length: 21 }, (_, i) => candle(i, 100));
-    const r = run('sma_20', points, T(21));
+    const r = run('sma_20_1h', points, T(21));
     expect(r.status).toBe('VALID');
     expect(r.value).toBeCloseTo(100);
   });
 
   it('sma20 insufficient data', () => {
     const points = Array.from({ length: 5 }, (_, i) => candle(i, 100));
-    expect(run('sma_20', points, T(5)).status).toBe('INSUFFICIENT_INPUTS');
+    expect(run('sma_20_1h', points, T(5)).status).toBe('INSUFFICIENT_INPUTS');
   });
 
   it('rsi14 = 100 on monotonic uptrend', () => {
     const points = Array.from({ length: 16 }, (_, i) => candle(i, 100 + i));
-    expect(run('rsi_14', points, T(16)).value).toBe(100);
+    expect(run('rsi_14_1h', points, T(16)).value).toBe(100);
   });
 
   it('rsi14 = 0 on monotonic downtrend', () => {
     const points = Array.from({ length: 16 }, (_, i) => candle(i, 200 - i));
-    expect(run('rsi_14', points, T(16)).value).toBe(0);
+    expect(run('rsi_14_1h', points, T(16)).value).toBe(0);
   });
 
   it('atr14 with constant range = 2', () => {
     const points = Array.from({ length: 16 }, (_, i) => candle(i, 100));
-    const r = run('atr_14', points, T(16));
+    const r = run('atr_14_1h', points, T(16));
     expect(r.status).toBe('VALID');
     expect(r.value).toBeCloseTo(2, 1);
   });
 
   it('volatility20 = 0 on constant price', () => {
     const points = Array.from({ length: 22 }, (_, i) => candle(i, 100));
-    expect(run('volatility_20', points, T(22)).value).toBeCloseTo(0);
+    expect(run('volatility_20_1h', points, T(22)).value).toBeCloseTo(0);
   });
 
   it('excludes in-progress candle (no lookahead)', () => {
     const points = [
       ...Array.from({ length: 20 }, (_, i) => candle(i, 100)),
-      { ...candle(20, 999), closedAt: T(21) }, // لم تُغلق بعد عند T(20)
+      { ...candle(20, 999), closedAt: T(21) },
     ];
-    // عند T(20): آخر شمعة مفتوحة — SMA يجب أن يستخدم الشموع 0..19 فقط
-    const r = run('sma_20', points, T(20));
+    const r = run('sma_20_1h', points, T(20));
     expect(r.value).toBeCloseTo(100);
   });
 });

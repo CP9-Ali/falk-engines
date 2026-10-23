@@ -1,5 +1,6 @@
 import WebSocket from 'ws';
 import 'dotenv/config';
+import { SourceRegistry } from './ingestion/source-registry';
 import { runPipeline } from './integration/pipeline';
 import { FeatureRegistry } from './feature-engineering/registry';
 import { makeSma20, makeRsi14, makeAtr14 } from './feature-engineering/financial';
@@ -49,6 +50,7 @@ async function main() {
   dashboard.start();
 
   const rawStore = new RawStore();
+  const registry = new SourceRegistry();
   const audit = new HashChainAuditLog();
   const auth = new AuthorizationService(audit);
   const reg = new FeatureRegistry();
@@ -68,6 +70,14 @@ async function main() {
       if (hist.length === 0) return;
 
       const canonical = toCanonical(point, tfLabel as any, lineage);
+           // ß4:  Õﬁﬁ „‰ ’Õ… «·„’œ— ·Â–« «·«” Œœ«„
+      const useCheck = registry.validateUse(point.sourceId, 'rsi_atr');
+      if (!useCheck.allowed) {
+        console.warn('[' + tfLabel + '] SKIP ó ' + useCheck.reason);
+        registry.markFailure(point.sourceId);
+        return;
+      }
+      registry.markSuccess(point.sourceId);
       const usability = assessUsability(canonical);
 
       const sources: Array<{ sourceId: string; points: RawDataPoint<Candle>[] }> = [

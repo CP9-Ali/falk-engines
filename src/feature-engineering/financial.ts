@@ -67,6 +67,22 @@ export function makeSma20(tfLabel: string, tfMs: number): FeatureDefinition<Cand
   });
 }
 
+export function makeEma20(tfLabel: string, tfMs: number): FeatureDefinition<CandleInputs, number> {
+  return makeFinancialFeature({
+    featureId: 'ema_20_' + tfLabel, definitionVersion: '1.0.0',
+    timeframe: tfLabel, timeframeMs: tfMs, minBars: 20, unit: 'price',
+    validationRules: [{ name: 'positive', check: v => v > 0 }],
+    compute: (closed) => {
+      const k = 2 / (20 + 1);
+      let ema = closed[0]!.value.close;
+      for (let i = 1; i < closed.length; i++) {
+        ema = closed[i]!.value.close * k + ema * (1 - k);
+      }
+      return ema;
+    },
+  });
+}
+
 export function makeRsi14(tfLabel: string, tfMs: number): FeatureDefinition<CandleInputs, number> {
   return makeFinancialFeature({
     featureId: 'rsi_14_' + tfLabel, definitionVersion: '1.0.0',
@@ -75,7 +91,10 @@ export function makeRsi14(tfLabel: string, tfMs: number): FeatureDefinition<Cand
     compute: (closed) => {
       const w = closed.slice(-15);
       let g = 0, l = 0;
-      for (let i = 1; i < w.length; i++) { const d = w[i]!.value.close - w[i-1]!.value.close; if (d > 0) g += d; else l -= d; }
+      for (let i = 1; i < w.length; i++) {
+        const d = w[i]!.value.close - w[i - 1]!.value.close;
+        if (d > 0) g += d; else l -= d;
+      }
       const ag = g / 14, al = l / 14;
       if (al === 0) return 100;
       return 100 - 100 / (1 + ag / al);
@@ -92,7 +111,7 @@ export function makeAtr14(tfLabel: string, tfMs: number): FeatureDefinition<Cand
       const w = closed.slice(-15);
       const trs: number[] = [];
       for (let i = 1; i < w.length; i++) {
-        const h = w[i]!.value.high, lo = w[i]!.value.low, pc = w[i-1]!.value.close;
+        const h = w[i]!.value.high, lo = w[i]!.value.low, pc = w[i - 1]!.value.close;
         trs.push(Math.max(h - lo, Math.abs(h - pc), Math.abs(lo - pc)));
       }
       return trs.reduce((a, b) => a + b, 0) / trs.length;
@@ -100,9 +119,27 @@ export function makeAtr14(tfLabel: string, tfMs: number): FeatureDefinition<Cand
   });
 }
 
-// === Backward-compat 1h exports (tests) ===
+export function makeVolatility20(tfLabel: string, tfMs: number): FeatureDefinition<CandleInputs, number> {
+  return makeFinancialFeature({
+    featureId: 'volatility_20_' + tfLabel, definitionVersion: '1.0.0',
+    timeframe: tfLabel, timeframeMs: tfMs, minBars: 21, unit: 'ratio',
+    validationRules: [{ name: 'non_negative', check: v => v >= 0 }],
+    compute: (closed) => {
+      const w = closed.slice(-21);
+      const returns: number[] = [];
+      for (let i = 1; i < w.length; i++) {
+        returns.push(Math.log(w[i]!.value.close / w[i - 1]!.value.close));
+      }
+      const mean = returns.reduce((a, b) => a + b, 0) / returns.length;
+      const variance = returns.reduce((s, r) => s + (r - mean) ** 2, 0) / returns.length;
+      return Math.sqrt(variance);
+    },
+  });
+}
+
+// === Legacy 1h exports (used by tests) ===
 export const sma20 = makeSma20('1h', 3_600_000);
-export const ema20 = sma20; // legacy alias
+export const ema20 = makeEma20('1h', 3_600_000);
 export const rsi14 = makeRsi14('1h', 3_600_000);
 export const atr14 = makeAtr14('1h', 3_600_000);
-export const volatility20 = sma20; // legacy alias
+export const volatility20 = makeVolatility20('1h', 3_600_000);
