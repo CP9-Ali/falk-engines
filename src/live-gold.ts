@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import 'dotenv/config';
 import { runPipeline } from './integration/pipeline';
 import { DataFusionEngine } from './data-fusion/engine';
+import { ConflictLog } from './data-fusion/conflict-record';
 import { FeatureRegistry } from './feature-engineering/registry';
 import { makeSma20, makeRsi14, makeAtr14 } from './feature-engineering/financial';
 import { structuralCheck } from './data-quality/checks/structural';
@@ -82,6 +83,7 @@ async function main() {
   setInterval(() => { eventIntel.refreshIfNeeded().catch(() => {}); eventIntel.refreshNewsIfNeeded(finnhubKey).catch(() => {}); }, 5 * 60_000);
   const audit = new HashChainAuditLog();
   const aggSource = new AggregationSource(audit);
+  const conflictLog = new ConflictLog('.backup/conflicts');
   const auth = new AuthorizationService(audit);
   const reg = new FeatureRegistry();
   for (const tf of TIMEFRAMES) {
