@@ -39,6 +39,9 @@ import { buildEvidenceSnapshot } from './evidence/evidence-chain';
 import type { RawDataPoint } from './core/types';
 import type { Candle } from './data-quality/checks/base';
 import type { FeatureComputeResult } from './feature-engineering/types';
+import { Scheduler } from './ingestion/scheduler';
+import { ConnectorManager } from './ingestion/connector-manager';
+import { ReferenceFetcher } from './ingestion/reference-fetcher';
 
 const PAXG_SYMBOL = 'paxgusdt';
 const PAXG_BINANCE = 'PAXGUSDT';
@@ -99,7 +102,41 @@ async function main() {
   const alertMgr = new AlertManager(audit);
   const healthMon = new HealthMonitor(new RateLimitManager(), errorQueue, ['twelvedata-ws', 'binance-paxg', 'xaus-api']);
   const alertBridge = new AlertBridge(healthMon, alertMgr, 'live-runner', { pollMs: 60_000 });
+  // ï¿½5: unified connector + reference fetcher
+  const connectors = new ConnectorManager();
+  // ï¿½5: register each source as a Connector
+  let tdSource: TwelveDataWsSource | null = null;
+  connectors.register({
+    source_id: 'twelvedata-ws',
+    start: async () => {
+      if (!TD_KEY) return;
+      tdSource = new TwelveDataWsSource(TD_KEY, 'XAU/USD', TIMEFRAMES, onCandle,
+        function (price, ts) { dashboard.broadcast({ type: 'tick', data: { source: 'XAU', price, ts } }); },
+        function () { /* health */ });
+      await tdSource.start();
+    },
+    stop: () => { if (tdSource) tdSource.stop(); },
+  });
+  const referenceFetcher = new ReferenceFetcher();
+  referenceFetcher.registerTwelveData();
+  referenceFetcher.registerH3();
+  await referenceFetcher.fetchBinancePaxg();
+
+  // ï¿½5: Scheduler ï¿½ verify market state before historical fetch
+  const scheduler = new Scheduler();
+  const schedCheck = scheduler.shouldRun('history-fetch');
+  console.log('[SCHEDULER] history-fetch: ' + (schedCheck.should_run ? 'allowed' : 'blocked') + ' (' + schedCheck.reason + ')');
   alertBridge.start();
+  // ï¿½5.1: GapFixer monitoring (logs detected gaps, no auto-refetch in live mode)
+  setInterval(() => {
+    const errGaps = gapFixer.detectFromErrors();
+    const histPoints = historiesByTf.get('1m') || [];
+    const pointGaps = gapFixer.detectFromPoints(histPoints);
+    const allGaps = errGaps.concat(pointGaps);
+    if (allGaps.length > 0) {
+      console.log('[GAPFIXER] ' + allGaps.length + ' gaps detected (errors=' + errGaps.length + ', completeness=' + pointGaps.length + ')');
+    }
+  }, 5 * 60_000);
   const reg = new FeatureRegistry();
 
   for (const tf of TIMEFRAMES) {
@@ -120,7 +157,7 @@ async function main() {
   setInterval(() => {
     const gaps = gapFixer.detectFromErrors();
     if (gaps.length > 0) {
-      gapFixer.fixAll(gaps, async () => []); // ÝÍÕ ÝÞØ¡ ÈáÇ ÅÚÇÏÉ ÌáÈ ÊáÞÇÆí ÈÚÏ
+      gapFixer.fixAll(gaps, async () => []); // ï¿½ï¿½ï¿½ ï¿½ï¿½Ø¡ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ï¿½ï¿½ï¿½
     }
   }, 5 * 60_000);
   const eventIntel = new EventIntelligence({ pollMs: 5 * 60_000, highImpactWindowMs: 30 * 60_000 });
@@ -434,18 +471,6 @@ async function main() {
     console.error('[PAXG] History:', (e as Error).message);
   }
 
-  if (TD_KEY) {
-    const td = new TwelveDataWsSource(
-      TD_KEY, 'XAU/USD', TIMEFRAMES,
-      onCandle,
-      function (price, ts) { dashboard.broadcast({ type: 'tick', data: { source: 'XAU', price: price, ts: ts } }); },
-      function () { /* health */ },
-    );
-    await td.start();
-    process.on('SIGINT', function () { td.stop(); });
-  } else {
-    console.warn('[TD] No TWELVEDATA_API_KEY');
-  }
 
   const url = 'wss://stream.binance.com:9443/stream?streams=' + PAXG_SYMBOL + '@kline_1m/' + PAXG_SYMBOL + '@ticker';
   const connect = function (): void {

@@ -1,7 +1,14 @@
-import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
+﻿import { appendFileSync, existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-export type RequestStatus = 'SUCCESS' | 'FAILED' | 'SKIPPED' | 'NO_RESULT';
+export type RequestStatus = 'SUCCESS' | 'NO_RESULT' | 'INSUFFICIENT_DATA' | 'FAILED' | 'SKIPPED';
+
+export interface Coverage {
+  readonly requested_range: { readonly from: string | null; readonly to: string | null };
+  readonly actual_range: { readonly from: string | null; readonly to: string | null };
+  readonly expected_candles: number | null;
+  readonly actual_candles: number;
+}
 
 /** §5.2: كل طلب يُسجَّل بـ request_id ووقت البدء والاستلام */
 export interface RequestLog {
@@ -13,6 +20,7 @@ export interface RequestLog {
   readonly status: RequestStatus;
   readonly reason?: string;
   readonly payload_size?: number;
+  readonly coverage?: Coverage;
 }
 
 export class RequestTracker {
@@ -42,17 +50,22 @@ export class RequestTracker {
     return { request_id, log };
   }
 
-  complete(log: RequestLog, status: RequestStatus, opts?: { reason?: string; payload_size?: number }): RequestLog {
-    const finished: RequestLog = {
-      ...log,
-      completed_at_utc: new Date().toISOString(),
-      status,
-      ...(opts?.reason !== undefined ? { reason: opts.reason } : {}),
-      ...(opts?.payload_size !== undefined ? { payload_size: opts.payload_size } : {}),
-    };
-    appendFileSync(this.path, JSON.stringify(finished) + '\n', 'utf-8');
-    return finished;
-  }
+  complete(
+  log: RequestLog,
+  status: RequestStatus,
+  opts?: { reason?: string; payload_size?: number; coverage?: Coverage }
+): RequestLog {
+  const finished: RequestLog = {
+    ...log,
+    completed_at_utc: new Date().toISOString(),
+    status,
+    ...(opts?.reason !== undefined ? { reason: opts.reason } : {}),
+    ...(opts?.payload_size !== undefined ? { payload_size: opts.payload_size } : {}),
+    ...(opts?.coverage !== undefined ? { coverage: opts.coverage } : {}),
+  };
+  appendFileSync(this.path, JSON.stringify(finished) + '\n', 'utf-8');
+  return finished;
+}
 
   list(): RequestLog[] {
     if (!existsSync(this.path)) return [];
@@ -66,13 +79,22 @@ export class RequestTracker {
 
   count(): number { return this.list().length; }
 
-  summary(): { total: number; success: number; failed: number; skipped: number } {
-    const all = this.list();
-    return {
-      total: all.length,
-      success: all.filter(r => r.status === 'SUCCESS').length,
-      failed: all.filter(r => r.status === 'FAILED').length,
-      skipped: all.filter(r => r.status === 'SKIPPED').length,
-    };
-  }
+  summary(): {
+  total: number;
+  success: number;
+  no_result: number;
+  insufficient_data: number;
+  failed: number;
+  skipped: number;
+} {
+  const all = this.list();
+  return {
+    total: all.length,
+    success: all.filter(r => r.status === 'SUCCESS').length,
+    no_result: all.filter(r => r.status === 'NO_RESULT').length,
+    insufficient_data: all.filter(r => r.status === 'INSUFFICIENT_DATA').length,
+    failed: all.filter(r => r.status === 'FAILED').length,
+    skipped: all.filter(r => r.status === 'SKIPPED').length,
+  };
+}
 }

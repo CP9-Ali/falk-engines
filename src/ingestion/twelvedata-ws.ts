@@ -5,6 +5,7 @@ import type { Candle } from '../data-quality/checks/base';
 import { RawStore, type RawRef } from '../storage/raw-store';
 import { CheckpointManager } from './checkpoint';
 import { RateLimitManager } from './rate-limiter';
+import { RetryManager, DEFAULT_RETRY_POLICY } from './retry-manager';
 import { ErrorQueue } from './error-queue';
 import { RequestTracker } from './request-tracker';
 
@@ -49,7 +50,7 @@ export class TwelveDataWsSource {
   private readonly rateLimit = new RateLimitManager();
   private readonly errors = new ErrorQueue();
   private readonly requests = new RequestTracker();
-
+  private readonly retry = new RetryManager(DEFAULT_RETRY_POLICY);
   constructor(
     private readonly apiKey: string,
     private readonly symbol: string,
@@ -112,23 +113,69 @@ export class TwelveDataWsSource {
       this.requests.complete(req.log, 'SKIPPED', { reason: permit.reason });
       this.logErr(tf.label + ': rate limited (' + permit.reason + ')');
       return;
-    }
-    const res = await fetch(url);
-    if (res.status === 429) {
-      this.rateLimit.reportRateLimit('twelvedata-ws');
-      this.errors.push({ source_id: 'twelvedata-ws', operation: 'history-fetch-' + tf.label, reason: 'HTTP 429' });
-      this.requests.complete(req.log, 'FAILED', { reason: 'HTTP 429' });
-      this.logErr(tf.label + ': HTTP 429');
+    }       const fetchResult = await this.retry.execute(async () => {
+      const res = await fetch(url);
+      if (res.status === 429) {
+        this.rateLimit.reportRateLimit('twelvedata-ws');
+        throw new Error('HTTP 429 (rate limit)');
+      }
+      this.rateLimit.reportSuccess('twelvedata-ws');
+      const data = (await res.json()) as any;
+      if (data.status === 'error') {
+        throw new Error(data.message || 'API error');
+      }
+      return data;
+    }, 'td-history-' + tf.label);
+
+    if (!fetchResult.success) {
+      this.errors.push({
+        source_id: 'twelvedata-ws',
+        operation: 'history-fetch-' + tf.label,
+        reason: fetchResult.errors.join('; '),
+      });
+      this.requests.complete(req.log, 'FAILED', { reason: fetchResult.errors[fetchResult.errors.length - 1] });
+      this.logErr(tf.label + ': all retries failed');
       return;
     }
-    this.rateLimit.reportSuccess('twelvedata-ws');
-    const data = (await res.json()) as any;
-    if (data.status === 'error') {
-      this.requests.complete(req.log, 'FAILED', { reason: data.message || 'API error' });
-      this.logErr(tf.label + ': ' + (data.message || 'API error'));
+
+    const data = fetchResult.value as any;
+    const actualCount = Array.isArray(data.values) ? data.values.length : 0;
+    const requestedCount = outputsize;
+
+    if (actualCount === 0) {
+      this.requests.complete(req.log, 'NO_RESULT', {
+        reason: 'no new bars in range',
+        coverage: {
+          requested_range: { from: null, to: new Date().toISOString() },
+          actual_range: { from: null, to: null },
+          expected_candles: requestedCount,
+          actual_candles: 0,
+        },
+      });
       return;
     }
-    this.requests.complete(req.log, 'SUCCESS', { payload_size: Array.isArray(data.values) ? data.values.length : 0 });
+
+    if (actualCount < requestedCount / 2) {
+      this.requests.complete(req.log, 'INSUFFICIENT_DATA', {
+        reason: 'coverage insufficient: ' + actualCount + '/' + requestedCount,
+        coverage: {
+          requested_range: { from: null, to: new Date().toISOString() },
+          actual_range: { from: null, to: new Date().toISOString() },
+          expected_candles: requestedCount,
+          actual_candles: actualCount,
+        },
+      });
+    } else {
+      this.requests.complete(req.log, 'SUCCESS', {
+        payload_size: actualCount,
+        coverage: {
+          requested_range: { from: null, to: new Date().toISOString() },
+          actual_range: { from: null, to: new Date().toISOString() },
+          expected_candles: requestedCount,
+          actual_candles: actualCount,
+        },
+      });
+    }
     if (!data.values || !Array.isArray(data.values)) return;
 
     let count = 0;
