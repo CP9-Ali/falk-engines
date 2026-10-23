@@ -117,7 +117,12 @@ async function main() {
     { rpoMs: 60000, rtoMs: 5000, offsiteRequired: true },
     sink,
   );
-
+  setInterval(() => {
+    const gaps = gapFixer.detectFromErrors();
+    if (gaps.length > 0) {
+      gapFixer.fixAll(gaps, async () => []); // ÝÍÕ ÝÞØ¡ ÈáÇ ÅÚÇÏÉ ÌáÈ ÊáÞÇÆí ÈÚÏ
+    }
+  }, 5 * 60_000);
   const eventIntel = new EventIntelligence({ pollMs: 5 * 60_000, highImpactWindowMs: 30 * 60_000 });
   eventIntel.refreshIfNeeded().catch(() => {});
   const finnhubKey = process.env.FINNHUB_API_KEY || '';
@@ -157,7 +162,7 @@ async function main() {
   });
   console.log('[RUN] analysis_run_id: ' + analysisRunId);
 
-  // ÇÓÊÚÇÏÉ histories ãä raw
+  // ??????? histories ?? raw
   const restorer = new HistoryRestorer('.backup/raw');
   for (const tf of TIMEFRAMES) {
     const restored = restorer.restore('twelvedata-ws', tf.label, 200);
@@ -172,7 +177,7 @@ async function main() {
     console.log('[RESTORE] binance-paxg/1m: ' + restoredPaxg.length + ' candles');
   }
 
-  // ÇÓÊÚÇÏÉ H3 ÇáÊÇÑíÎíÉ ãä 1h
+  // ??????? H3 ????????? ?? 1h
   const restoredH1 = restorer.restore('twelvedata-ws', '1h', 300);
   const h3History = h3Aggregator.restoreFromHistory(restoredH1);
   if (h3History.length > 0) {
@@ -199,7 +204,6 @@ async function main() {
         return;
       }
       registry.markSuccess(point.sourceId);
-
       let aggComparison = '';
       const sessionInfo = classifySession(point.eventTime);
       if (tfLabel === '5m' || tfLabel === '15m' || tfLabel === '1h' || tfLabel === '4h') {
@@ -264,7 +268,7 @@ async function main() {
       const rsiVal = typeof rsi?.value === 'number' ? rsi.value : null;
       const atrVal = typeof atr?.value === 'number' ? atr.value : null;
 
-      // §13: engine results per candle
+      // ?13: engine results per candle
       const nowIso = new Date().toISOString();
       engineResults.append({
         analysis_run_id: analysisRunId, timeframe: tfLabel,
@@ -509,5 +513,6 @@ async function main() {
     process.exit(0);
   });
 }
+
 
 main().catch(console.error);
