@@ -8,11 +8,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 export type DashboardEvent =
   | { type: 'tick'; data: { source: string; price: number; ts: string } }
-  | { type: 'candle'; data: any; status?: string }
-  | { type: 'feature'; data: { name: string; value: number | null } }
-  | { type: 'quality'; data: { status: string; suitable: boolean } }
-  | { type: 'fusion'; data: { value: number | null; conflict: string } }
-  | { type: 'task'; data: { state: string; exec: string } }
+  | { type: 'candle'; timeframe?: string; data: any; status?: string }
+  | { type: 'feature'; timeframe?: string; data: { name: string; value: number | null } }
+  | { type: 'quality'; timeframe?: string; data: { status: string; suitable: boolean; volume_semantics?: string } }
+  | { type: 'fusion'; timeframe?: string; data: { value: number | null; conflict: string } }
+  | { type: 'task'; timeframe?: string; data: { state: string; exec: string } }
   | { type: 'worm'; data: { id: string; total: number; last: string } }
   | { type: 'error'; data: { message: string } };
 
@@ -22,24 +22,20 @@ export class DashboardServer {
   private wss = new WebSocketServer({ server: this.httpServer });
   private clients = new Set<WebSocket>();
   private candleHistory = new Map<string, DashboardEvent>();
-  private maxHistory = 200;
+  private maxHistory = 500;
   private replayCount = 0;
 
   constructor(private port = 3000) {
     this.app.use(express.static(join(__dirname, 'public')));
-    this.app.get('/health', (_, res) => res.json({
-      ok: true, clients: this.clients.size, candles: this.candleHistory.size
-    }));
+    this.app.get('/health', (_, res) => res.json({ ok: true, clients: this.clients.size, candles: this.candleHistory.size }));
 
     this.wss.on('connection', (ws) => {
       this.clients.add(ws);
-      const events = Array.from(this.candleHistory.values());
-      for (const ev of events) {
+      for (const ev of this.candleHistory.values()) {
         if (ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(ev));
       }
       this.replayCount++;
-      console.log('[Dashboard] Client connected, replayed ' + events.length + ' events (total conns: ' + this.replayCount + ')');
-
+      console.log('[Dashboard] Client connected, replayed ' + this.candleHistory.size + ' events (conns: ' + this.replayCount + ')');
       ws.on('close', () => this.clients.delete(ws));
       ws.on('error', () => this.clients.delete(ws));
     });
@@ -47,7 +43,8 @@ export class DashboardServer {
 
   broadcast(event: DashboardEvent): void {
     if (event.type === 'candle') {
-      const fp = event.data.fingerprint || (event.data.symbol + '-' + event.data.eventTime);
+      const tf = (event as any).timeframe || '1m';
+      const fp = (event.data.fingerprint || (event.data.symbol + '-' + event.data.eventTime)) + ':' + tf;
       if (!this.candleHistory.has(fp)) {
         this.candleHistory.set(fp, event);
         if (this.candleHistory.size > this.maxHistory) {
@@ -63,9 +60,7 @@ export class DashboardServer {
   }
 
   start(): void {
-    this.httpServer.listen(this.port, () => {
-      console.log('[Dashboard] Open: http://localhost:' + this.port);
-    });
+    this.httpServer.listen(this.port, () => console.log('[Dashboard] Open: http://localhost:' + this.port));
   }
 
   stop(): void {

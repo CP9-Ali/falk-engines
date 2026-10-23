@@ -2,7 +2,7 @@
 <html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
-<title>FALK - XAUUSD Live Dashboard</title>
+<title>FALK - XAUUSD Multi-Timeframe Dashboard</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Tahoma,sans-serif;background:#0a0e27;color:#e0e0e0;min-height:100vh}
@@ -22,6 +22,11 @@ body{font-family:'Segoe UI',Tahoma,sans-serif;background:#0a0e27;color:#e0e0e0;m
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
 .ticker-bar{background:#131829;padding:8px 30px;font-size:12px;color:#8892b0;border-bottom:1px solid #2a3050;display:flex;gap:30px;flex-wrap:wrap}
 .ticker-bar strong{color:#e0e0e0}
+.tf-tabs{display:flex;gap:0;background:#0f1429;border-bottom:1px solid #2a3050;padding:0 30px}
+.tf-tab{padding:12px 24px;font-size:14px;font-weight:bold;color:#8892b0;cursor:pointer;border-bottom:3px solid transparent;transition:all 0.2s;user-select:none}
+.tf-tab:hover{color:#e0e0e0;background:#131829}
+.tf-tab.active{color:#f5a623;border-bottom-color:#f5a623;background:#131829}
+.tf-tab .count{font-size:10px;color:#5a6490;margin-left:6px;font-weight:normal}
 .grid{display:grid;grid-template-columns:2fr 1fr;gap:20px;padding:20px;max-width:1600px;margin:0 auto}
 .card{background:#131829;border-radius:12px;padding:20px;border:1px solid #2a3050;margin-bottom:20px}
 .card h3{font-size:11px;text-transform:uppercase;color:#8892b0;margin-bottom:15px;letter-spacing:1.5px;font-weight:600}
@@ -47,14 +52,14 @@ td{padding:8px 6px;border-bottom:1px solid #1a1f3a;font-family:Consolas,monospac
 .src-xau{color:#f5a623;font-weight:bold}.src-paxg{color:#8892b0}
 .worm-num{font-size:44px;font-weight:bold;color:#ff6b9d;font-variant-numeric:tabular-nums}
 .worm-last{font-size:11px;color:#5a6490;margin-top:8px;font-family:Consolas,monospace;word-break:break-all}
-@media(max-width:900px){.grid{grid-template-columns:1fr}}
+@media(max-width:900px){.grid{grid-template-columns:1fr}.tf-tabs{padding:0 10px}.tf-tab{padding:10px 14px;font-size:12px}}
 </style>
 </head>
 <body>
 <div class="header">
   <div>
     <div class="symbol">XAUUSD - GOLD SPOT</div>
-    <div class="subtitle">FALK Live Pipeline - TwelveData WS + Binance PAXG</div>
+    <div class="subtitle">FALK Live Pipeline - Multi-Timeframe</div>
   </div>
   <div style="text-align:right">
     <div class="price neutral" id="price">--</div>
@@ -63,23 +68,25 @@ td{padding:8px 6px;border-bottom:1px solid #1a1f3a;font-family:Consolas,monospac
   <div class="status">
     <div><span class="dot dot-off" id="ws-dot"></span>WS</div>
     <div><span class="dot dot-live"></span>LIVE</div>
-    <div><strong id="candle-count">0</strong> candles</div>
+    <div><strong id="total-candles">0</strong> candles total</div>
   </div>
 </div>
 <div class="ticker-bar">
   <div>Last tick: <strong id="last-tick">--</strong></div>
   <div>Source: <strong id="tick-source">--</strong></div>
-  <div>Total ticks: <strong id="tick-count">0</strong></div>
+  <div>Ticks: <strong id="tick-count">0</strong></div>
+  <div>Volume: <strong id="vol-semantics">--</strong></div>
   <div>Uptime: <strong id="uptime">0s</strong></div>
 </div>
+<div class="tf-tabs" id="tf-tabs"></div>
 <div class="grid">
   <div>
     <div class="card">
-      <h3>XAUUSD - Live Chart (XAU only)</h3>
+      <h3 id="chart-title">XAUUSD - 1m Chart</h3>
       <canvas id="chart"></canvas>
     </div>
     <div class="card">
-      <h3>Recent Candles (XAU priority)</h3>
+      <h3>Recent Candles</h3>
       <table>
         <thead><tr><th>Time</th><th>Source</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Status</th></tr></thead>
         <tbody id="candles-table"></tbody>
@@ -88,7 +95,7 @@ td{padding:8px 6px;border-bottom:1px solid #1a1f3a;font-family:Consolas,monospac
   </div>
   <div>
     <div class="card">
-      <h3>Features (XAU)</h3>
+      <h3 id="features-title">Features - 1m</h3>
       <div class="features">
         <div class="feature"><div class="feature-label">SMA 20</div><div class="feature-value" id="sma">N/A</div></div>
         <div class="feature"><div class="feature-label">RSI 14</div><div class="feature-value" id="rsi">N/A</div></div>
@@ -101,15 +108,25 @@ td{padding:8px 6px;border-bottom:1px solid #1a1f3a;font-family:Consolas,monospac
       <div class="worm-last">Last: <span id="worm-last">--</span></div>
     </div>
     <div class="card">
-      <h3>Event Stream</h3>
+      <h3 id="log-title">Event Stream - 1m</h3>
       <div class="log" id="log"></div>
     </div>
   </div>
 </div>
 <script>
-// fingerprint -> candle (dedupe)
-const candleMap = new Map();
-const MAX_CANDLES = 200;
+const TFS = ['1m', '5m', '15m', '1h', '4h', '1d', '1w'];
+const state = {
+  activeTf: '1m',
+  candlesByTf: {},
+  featuresByTf: {},
+  eventsByTf: {},
+};
+for (const tf of TFS) {
+  state.candlesByTf[tf] = new Map();
+  state.featuresByTf[tf] = { sma: null, rsi: null, atr: null };
+  state.eventsByTf[tf] = [];
+}
+
 const canvas = document.getElementById('chart'), ctx = canvas.getContext('2d');
 let lastPrice = null, tickCount = 0, startTime = Date.now();
 
@@ -122,40 +139,59 @@ function resize() {
 resize();
 window.addEventListener('resize', () => { resize(); draw(); });
 
-function getChartCandles() {
-  const xauOnly = Array.from(candleMap.values()).filter(c => c.data.symbol === 'XAU');
-  if (xauOnly.length >= 2) return xauOnly.sort((a,b) => new Date(a.data.eventTime).getTime() - new Date(b.data.eventTime).getTime());
-  return getCandles();
+function buildTabs() {
+  const el = document.getElementById('tf-tabs');
+  el.innerHTML = '';
+  for (const tf of TFS) {
+    const tab = document.createElement('div');
+    tab.className = 'tf-tab' + (tf === state.activeTf ? ' active' : '');
+    tab.dataset.tf = tf;
+    tab.innerHTML = tf + ' <span class="count" id="tab-count-' + tf + '">0</span>';
+    tab.onclick = () => switchTf(tf);
+    el.appendChild(tab);
+  }
 }
 
-function getCandles() {
-  const all = Array.from(candleMap.values());
-  all.sort((a,b) => new Date(a.data.eventTime).getTime() - new Date(b.data.eventTime).getTime());
-  // Prefer XAU when both exist at same minute
+function switchTf(tf) {
+  state.activeTf = tf;
+  document.querySelectorAll('.tf-tab').forEach(t => t.classList.toggle('active', t.dataset.tf === tf));
+  document.getElementById('chart-title').textContent = 'XAUUSD - ' + tf + ' Chart';
+  document.getElementById('features-title').textContent = 'Features - ' + tf;
+  document.getElementById('log-title').textContent = 'Event Stream - ' + tf;
+  const f = state.featuresByTf[tf];
+  document.getElementById('sma').textContent = f.sma === null ? 'N/A' : Number(f.sma).toFixed(2);
+  document.getElementById('rsi').textContent = f.rsi === null ? 'N/A' : Number(f.rsi).toFixed(2);
+  document.getElementById('atr').textContent = f.atr === null ? 'N/A' : Number(f.atr).toFixed(2);
+  draw();
+  renderTable();
+  renderLog();
+  updateTabCounts();
+}
+
+function getCandles(tf) {
+  const map = state.candlesByTf[tf];
+  const all = Array.from(map.values());
+  all.sort((a, b) => new Date(a.data.eventTime).getTime() - new Date(b.data.eventTime).getTime());
+  // Prefer XAU when both XAU and PAXG exist at same time
   const byTime = new Map();
   for (const c of all) {
     const t = c.data.eventTime;
-    const existing = byTime.get(t);
-    if (!existing) { byTime.set(t, c); continue; }
-    const curXau = c.data.symbol === 'XAU';
-    const exXau = existing.data.symbol === 'XAU';
-    if (curXau && !exXau) byTime.set(t, c);
-    else if (!curXau && exXau) { /* keep existing */ }
-    else byTime.set(t, c); // same source, latest wins
+    const ex = byTime.get(t);
+    if (!ex) { byTime.set(t, c); continue; }
+    if (c.data.symbol === 'XAU' && ex.data.symbol !== 'XAU') byTime.set(t, c);
+    else if (c.data.symbol !== 'XAU' && ex.data.symbol === 'XAU') { /* keep */ }
+    else byTime.set(t, c);
   }
-  return Array.from(byTime.values()).sort((a,b) =>
-    new Date(a.data.eventTime).getTime() - new Date(b.data.eventTime).getTime());
+  return Array.from(byTime.values()).sort((a, b) => new Date(a.data.eventTime).getTime() - new Date(b.data.eventTime).getTime());
 }
 
 function draw() {
   const w = canvas.offsetWidth, h = canvas.offsetHeight;
   ctx.clearRect(0, 0, w, h);
-  const cs = getChartCandles();
+  const cs = getCandles(state.activeTf);
   if (cs.length < 2) {
-    ctx.fillStyle = '#5a6490';
-    ctx.font = '14px Segoe UI';
-    ctx.textAlign = 'center';
-    ctx.fillText('Waiting for candles...', w/2, h/2);
+    ctx.fillStyle = '#5a6490'; ctx.font = '14px Segoe UI'; ctx.textAlign = 'center';
+    ctx.fillText('Waiting for ' + state.activeTf + ' candles...', w/2, h/2);
     return;
   }
   const closes = cs.map(c => c.data.value.close);
@@ -170,8 +206,7 @@ function draw() {
   }
   const step = cw / (closes.length - 1);
   const grad = ctx.createLinearGradient(0, pad, 0, pad+ch);
-  grad.addColorStop(0, 'rgba(245,166,35,0.3)');
-  grad.addColorStop(1, 'rgba(245,166,35,0)');
+  grad.addColorStop(0, 'rgba(245,166,35,0.3)'); grad.addColorStop(1, 'rgba(245,166,35,0)');
   ctx.beginPath();
   closes.forEach((c, i) => {
     const x = pad + i*step, y = pad + ch - ((c-min)/range)*ch;
@@ -185,17 +220,8 @@ function draw() {
   ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI*2); ctx.fillStyle = '#f5a623'; ctx.fill();
 }
 
-function addLog(type, info) {
-  const log = document.getElementById('log');
-  const e = document.createElement('div'); e.className = 'log-entry';
-  const t = new Date().toLocaleTimeString('en-GB', {hour12:false});
-  e.innerHTML = '<span class="log-time">'+t+'</span><span class="log-type t-'+type+'">'+type+'</span><span class="log-info">'+info+'</span>';
-  log.insertBefore(e, log.firstChild);
-  while (log.children.length > 60) log.removeChild(log.lastChild);
-}
-
 function renderTable() {
-  const cs = getCandles();
+  const cs = getCandles(state.activeTf);
   const recent = cs.slice(-20).reverse();
   const tb = document.getElementById('candles-table');
   tb.innerHTML = '';
@@ -213,7 +239,37 @@ function renderTable() {
       + '<td><span class="badge '+cls+'">'+status+'</span></td>';
     tb.appendChild(r);
   }
-  document.getElementById('candle-count').textContent = cs.length;
+}
+
+function renderLog() {
+  const log = document.getElementById('log');
+  log.innerHTML = '';
+  const evs = state.eventsByTf[state.activeTf] || [];
+  for (const e of evs.slice(0, 60)) {
+    const div = document.createElement('div');
+    div.className = 'log-entry';
+    div.innerHTML = '<span class="log-time">'+e.time+'</span><span class="log-type t-'+e.type+'">'+e.type+'</span><span class="log-info">'+e.info+'</span>';
+    log.appendChild(div);
+  }
+}
+
+function addLog(tf, type, info) {
+  const t = new Date().toLocaleTimeString('en-GB', {hour12:false});
+  const arr = state.eventsByTf[tf] || [];
+  arr.unshift({time: t, type, info});
+  if (arr.length > 100) arr.pop();
+  state.eventsByTf[tf] = arr;
+  if (tf === state.activeTf) renderLog();
+}
+
+function updateTabCounts() {
+  for (const tf of TFS) {
+    const el = document.getElementById('tab-count-' + tf);
+    if (el) el.textContent = '(' + state.candlesByTf[tf].size + ')';
+  }
+  let total = 0;
+  for (const tf of TFS) total += state.candlesByTf[tf].size;
+  document.getElementById('total-candles').textContent = total;
 }
 
 function updateUptime() {
@@ -222,22 +278,19 @@ function updateUptime() {
 }
 setInterval(updateUptime, 1000);
 
+buildTabs();
+updateTabCounts();
+
 const ws = new WebSocket('ws://' + location.host);
-ws.onopen = () => {
-  document.getElementById('ws-dot').className = 'dot dot-on';
-  addLog('INFO', 'Dashboard connected');
-};
-ws.onclose = () => {
-  document.getElementById('ws-dot').className = 'dot dot-off';
-  addLog('ERROR', 'Disconnected');
-};
+ws.onopen = () => { document.getElementById('ws-dot').className = 'dot dot-on'; addLog(state.activeTf, 'INFO', 'Dashboard connected'); };
+ws.onclose = () => { document.getElementById('ws-dot').className = 'dot dot-off'; addLog(state.activeTf, 'ERROR', 'Disconnected'); };
 ws.onmessage = (e) => {
   const m = JSON.parse(e.data);
+  const tf = m.timeframe || '1m';
 
   if (m.type === 'tick') {
-    // XAU priority: if we got XAU recently, ignore PAXG
     if (m.data.source === 'XAU') window._lastXauTick = Date.now();
-    else if (window._lastXauTick && Date.now()-window._lastXauTick < 30000) return;
+    else if (window._lastXauTick && Date.now() - window._lastXauTick < 30000) return;
 
     tickCount++;
     document.getElementById('tick-count').textContent = tickCount;
@@ -245,8 +298,7 @@ ws.onmessage = (e) => {
     document.getElementById('last-tick').textContent = new Date(m.data.ts).toLocaleTimeString('en-GB', {hour12:false});
     const p = document.getElementById('price');
     p.textContent = '$' + m.data.price.toFixed(2);
-    p.classList.add('pulse');
-    setTimeout(() => p.classList.remove('pulse'), 400);
+    p.classList.add('pulse'); setTimeout(() => p.classList.remove('pulse'), 400);
     if (lastPrice !== null) {
       const d = m.data.price - lastPrice;
       const pct = (d/lastPrice)*100;
@@ -259,36 +311,46 @@ ws.onmessage = (e) => {
   }
 
   if (m.type === 'candle') {
-    const fp = m.data.fingerprint || (m.data.symbol + '-' + m.data.eventTime);
-    candleMap.set(fp, m);
-    if (candleMap.size > MAX_CANDLES) {
-      const firstKey = candleMap.keys().next().value;
-      if (firstKey) candleMap.delete(firstKey);
-    }
-    if (m.status !== 'BACKFILL') {
-      // Only update price from primary source
-      if (m.data.symbol === 'XAU' || !window._lastXauTick || Date.now()-window._lastXauTick > 30000) {
-        document.getElementById('price').textContent = '$' + m.data.value.close.toFixed(2);
+    const fp = (m.data.fingerprint || (m.data.symbol + '-' + m.data.eventTime));
+    if (!state.candlesByTf[tf].has(fp)) {
+      state.candlesByTf[tf].set(fp, m);
+      if (state.candlesByTf[tf].size > 200) {
+        const firstKey = state.candlesByTf[tf].keys().next().value;
+        if (firstKey) state.candlesByTf[tf].delete(firstKey);
       }
-      addLog('CANDLE', m.data.symbol + ' C=' + m.data.value.close.toFixed(2));
     }
-    draw();
-    renderTable();
+    if (tf === state.activeTf) {
+      if (m.data.symbol === 'XAU') document.getElementById('price').textContent = '$' + m.data.value.close.toFixed(2);
+      if (m.status !== 'BACKFILL') addLog(tf, 'CANDLE', m.data.symbol + ' C=' + m.data.value.close.toFixed(2));
+      draw();
+      renderTable();
+    }
+    updateTabCounts();
+    return;
   }
 
   if (m.type === 'feature') {
-    document.getElementById(m.data.name).textContent = m.data.value === null ? 'N/A' : Number(m.data.value).toFixed(2);
+    state.featuresByTf[tf][m.data.name] = m.data.value;
+    if (tf === state.activeTf) {
+      const el = document.getElementById(m.data.name);
+      if (el) el.textContent = m.data.value === null ? 'N/A' : Number(m.data.value).toFixed(2);
+    }
+    return;
   }
-  if (m.type === 'quality') addLog('QUALITY', 'status='+m.data.status);
-  if (m.type === 'fusion') addLog('FUSION', 'value='+m.data.value+' conflict='+m.data.conflict);
-  if (m.type === 'task' && m.data.state !== 'COMPLETED') addLog('TASK', m.data.state);
+
+  if (m.type === 'quality') {
+    addLog(tf, 'QUALITY', 'status=' + m.data.status);
+    if (m.data.volume_semantics) document.getElementById('vol-semantics').textContent = m.data.volume_semantics;
+  }
+  if (m.type === 'fusion') addLog(tf, 'FUSION', 'value=' + m.data.value + ' conflict=' + m.data.conflict);
+  if (m.type === 'task' && m.data.state !== 'COMPLETED') addLog(tf, 'TASK', m.data.state);
   if (m.type === 'worm') {
     document.getElementById('worm-count').textContent = m.data.total;
     document.getElementById('worm-last').textContent = m.data.id;
   }
-  if (m.type === 'error') addLog('ERROR', m.data.message);
+  if (m.type === 'error') addLog(tf, 'ERROR', m.data.message);
 };
-addLog('INFO', 'Waiting for data...');
+addLog('1m', 'INFO', 'Waiting for data...');
 </script>
 </body>
 </html>

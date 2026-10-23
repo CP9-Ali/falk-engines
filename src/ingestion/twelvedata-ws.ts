@@ -5,21 +5,42 @@ import type { Candle } from '../data-quality/checks/base';
 
 interface Bar { start: number; open: number; high: number; low: number; close: number; }
 
+export interface Timeframe {
+  label: string;
+  ms: number;
+  twelveDataInterval: string;
+  historySize: number;
+  hidden?: boolean;
+}
+
+// 5 أطر مباشرة + 1h مخفي (يُستخدم لبناء H3)
+export const TIMEFRAMES: Timeframe[] = [
+  { label: '1m',  ms: 60_000,        twelveDataInterval: '1min',   historySize: 100 },
+  { label: '5m',  ms: 300_000,       twelveDataInterval: '5min',   historySize: 100 },
+  { label: '15m', ms: 900_000,       twelveDataInterval: '15min',  historySize: 100 },
+  { label: '1h',  ms: 3_600_000,     twelveDataInterval: '1h',     historySize: 100 },
+  { label: '4h',  ms: 14_400_000,    twelveDataInterval: '4h',     historySize: 60  },
+  { label: '1d',  ms: 86_400_000,    twelveDataInterval: '1day',   historySize: 60  },
+  { label: '1w',  ms: 604_800_000,   twelveDataInterval: '1week',  historySize: 30  },
+];
+
+export type CandleHandler = (tfLabel: string, point: RawDataPoint<Candle>, isHistory: boolean) => void;
+
 export class TwelveDataWsSource {
   readonly name = 'twelvedata-ws';
   private ws: WebSocket | null = null;
   private started = false;
-  private lastTickPrice: number | null = null;
-  private currentBar: Bar | null = null;
-  private lastEmittedBarStart = 0;
-  private heartbeatTimer: NodeJS.Timeout | null = null;
   private lastTickAt = 0;
   private lastErrorLogAt = 0;
+  private heartbeatTimer: NodeJS.Timeout | null = null;
+  private currentBars = new Map<string, Bar>();
+  private lastEmittedBarStart = new Map<string, number>();
 
   constructor(
     private readonly apiKey: string,
     private readonly symbol: string,
-    private readonly onCandle: (p: RawDataPoint<Candle>, isHistory: boolean) => void,
+    private readonly timeframes: Timeframe[],
+    private readonly onCandle: CandleHandler,
     private readonly onTick: (price: number, ts: string) => void,
     private readonly onHealthChange: (healthy: boolean) => void,
   ) {}
@@ -27,8 +48,8 @@ export class TwelveDataWsSource {
   async start(): Promise<void> {
     if (this.started) return;
     this.started = true;
-    await this.loadHistory();
     this.connect();
+    this.loadAllHistoriesInBackground().catch(e => console.error('[TD-WS] History loader:', (e as Error).message));
   }
 
   stop(): void {
@@ -41,51 +62,58 @@ export class TwelveDataWsSource {
     return this.lastTickAt > 0 && (now - this.lastTickAt) < 30000;
   }
 
-  private async loadHistory(): Promise<void> {
-    try {
-      console.log('[TD-WS] Loading 100 historical bars...');
-      const url = 'https://api.twelvedata.com/time_series?symbol=' +
-        encodeURIComponent(this.symbol) +
-        '&interval=1min&outputsize=100&timezone=UTC&apikey=' +
-        encodeURIComponent(this.apiKey);
-      const res = await fetch(url);
-      const data = (await res.json()) as any;
-      if (data.status === 'error') {
-        this.logErr('History: ' + (data.message || 'API error'));
-        return;
-      }
-      if (!data.values || !Array.isArray(data.values)) return;
-
-      let count = 0;
-      const values = [...data.values].reverse();
-      const now = Date.now();
-
-      for (const v of values) {
-        const dt = String(v.datetime).replace(' ', 'T') + 'Z';
-        const barStart = new Date(dt).getTime();
-        if (!Number.isFinite(barStart)) continue;
-        if (barStart + 60_000 > now) continue;
-        if (barStart <= this.lastEmittedBarStart) continue;
-        const o = parseFloat(v.open), h = parseFloat(v.high);
-        const l = parseFloat(v.low), c = parseFloat(v.close);
-        if (!Number.isFinite(o) || !Number.isFinite(c)) continue;
-        this.lastEmittedBarStart = barStart;
-        const p: RawDataPoint<Candle> = {
-          sourceId: 'twelvedata-ws',
-          value: { open: o, high: h, low: l, close: c, volume: 0 },
-          eventTime: new Date(barStart).toISOString(),
-          closedAt: new Date(barStart + 60_001).toISOString(),
-          arrivalTime: new Date().toISOString(),
-          availabilityTime: new Date(barStart + 60_001).toISOString(),
-          version: 1, fingerprint: 'tdws-' + barStart,
-        };
-        this.onCandle(p, true);
-        count++;
-      }
-      console.log('[TD-WS] Loaded ' + count + ' historical bars');
-    } catch (e) {
-      this.logErr('History: ' + (e as Error).message);
+  private async loadAllHistoriesInBackground(): Promise<void> {
+    for (const tf of this.timeframes) {
+      try { await this.loadHistory(tf); }
+      catch (e) { this.logErr('History ' + tf.label + ': ' + (e as Error).message); }
+      await new Promise(r => setTimeout(r, 8500));
     }
+    console.log('[TD-WS] All histories loaded');
+  }
+
+  private async loadHistory(tf: Timeframe): Promise<void> {
+    console.log('[TD-WS] Loading ' + tf.label + ' history...');
+    const url = 'https://api.twelvedata.com/time_series?symbol=' +
+      encodeURIComponent(this.symbol) +
+      '&interval=' + tf.twelveDataInterval +
+      '&outputsize=' + tf.historySize +
+      '&timezone=UTC&apikey=' +
+      encodeURIComponent(this.apiKey);
+    const res = await fetch(url);
+    const data = (await res.json()) as any;
+    if (data.status === 'error') { this.logErr(tf.label + ': ' + (data.message || 'API error')); return; }
+    if (!data.values || !Array.isArray(data.values)) return;
+
+    let count = 0;
+    const now = Date.now();
+    const lastStart = this.lastEmittedBarStart.get(tf.label) || 0;
+    const values = [...data.values].reverse();
+
+    for (const v of values) {
+      const dt = String(v.datetime).replace(' ', 'T') + 'Z';
+      const barStart = new Date(dt).getTime();
+      if (!Number.isFinite(barStart)) continue;
+      if (barStart + tf.ms > now) continue;
+      if (barStart <= lastStart) continue;
+      const o = parseFloat(v.open), h = parseFloat(v.high);
+      const l = parseFloat(v.low), c = parseFloat(v.close);
+      if (!Number.isFinite(o) || !Number.isFinite(c)) continue;
+      this.lastEmittedBarStart.set(tf.label, barStart);
+
+      const p: RawDataPoint<Candle> = {
+        sourceId: 'twelvedata-ws',
+        value: { open: o, high: h, low: l, close: c, volume: 0 },
+        eventTime: new Date(barStart).toISOString(),
+        closedAt: new Date(barStart + tf.ms + 1).toISOString(),
+        arrivalTime: new Date().toISOString(),
+        availabilityTime: new Date(barStart + tf.ms + 1).toISOString(),
+        version: 1,
+        fingerprint: 'tdws-' + tf.label + '-' + barStart,
+      };
+      this.onCandle(tf.label, p, true);
+      count++;
+    }
+    console.log('[TD-WS] Loaded ' + count + ' ' + tf.label + ' bars');
   }
 
   private connect(): void {
@@ -114,7 +142,7 @@ export class TwelveDataWsSource {
     ws.on('close', () => {
       if (this.heartbeatTimer) { clearInterval(this.heartbeatTimer); this.heartbeatTimer = null; }
       this.onHealthChange(false);
-      if (this.started) { console.warn('[TD-WS] Closed, reconnect in 5s'); setTimeout(() => this.connect(), 5000); }
+      if (this.started) { console.warn('[TD-WS] Closed, reconnect 5s'); setTimeout(() => this.connect(), 5000); }
     });
 
     ws.on('error', (e) => { this.logErr(e.message); this.onHealthChange(false); });
@@ -125,33 +153,40 @@ export class TwelveDataWsSource {
     this.lastTickAt = Date.now();
     this.onHealthChange(true);
     this.onTick(price, new Date(tsMs).toISOString());
+
     const now = Date.now();
-    const m = Math.floor(now / 60000) * 60000;
-    if (this.currentBar && m > this.currentBar.start) {
-      this.emitClosedBar(this.currentBar);
-      this.currentBar = { start: m, open: price, high: price, low: price, close: price };
-    } else if (this.currentBar) {
-      this.currentBar.high = Math.max(this.currentBar.high, price);
-      this.currentBar.low = Math.min(this.currentBar.low, price);
-      this.currentBar.close = price;
-    } else {
-      this.currentBar = { start: m, open: price, high: price, low: price, close: price };
+    for (const tf of this.timeframes) {
+      const barStart = Math.floor(now / tf.ms) * tf.ms;
+      const cur = this.currentBars.get(tf.label);
+      if (cur && barStart > cur.start) {
+        this.emitClosedBar(tf, cur);
+        this.currentBars.set(tf.label, { start: barStart, open: price, high: price, low: price, close: price });
+      } else if (cur) {
+        cur.high = Math.max(cur.high, price);
+        cur.low = Math.min(cur.low, price);
+        cur.close = price;
+      } else {
+        this.currentBars.set(tf.label, { start: barStart, open: price, high: price, low: price, close: price });
+      }
     }
   }
 
-  private emitClosedBar(bar: Bar): void {
-    if (bar.start <= this.lastEmittedBarStart) return;
-    this.lastEmittedBarStart = bar.start;
+  private emitClosedBar(tf: Timeframe, bar: Bar): void {
+    const last = this.lastEmittedBarStart.get(tf.label) || 0;
+    if (bar.start <= last) return;
+    this.lastEmittedBarStart.set(tf.label, bar.start);
+
     const p: RawDataPoint<Candle> = {
       sourceId: 'twelvedata-ws',
       value: { open: bar.open, high: bar.high, low: bar.low, close: bar.close, volume: 0 },
       eventTime: new Date(bar.start).toISOString(),
-      closedAt: new Date(bar.start + 60001).toISOString(),
+      closedAt: new Date(bar.start + tf.ms + 1).toISOString(),
       arrivalTime: new Date().toISOString(),
-      availabilityTime: new Date(bar.start + 60001).toISOString(),
-      version: 1, fingerprint: 'tdws-' + bar.start,
+      availabilityTime: new Date(bar.start + tf.ms + 1).toISOString(),
+      version: 1,
+      fingerprint: 'tdws-' + tf.label + '-' + bar.start,
     };
-    this.onCandle(p, false);
+    this.onCandle(tf.label, p, false);
   }
 
   private logErr(msg: string): void {

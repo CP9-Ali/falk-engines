@@ -2,32 +2,32 @@ import WebSocket from 'ws';
 import 'dotenv/config';
 import { runPipeline } from './integration/pipeline';
 import { FeatureRegistry } from './feature-engineering/registry';
-import { sma20, rsi14, atr14 } from './feature-engineering/financial';
+import { makeSma20, makeRsi14, makeAtr14 } from './feature-engineering/financial';
 import { structuralCheck } from './data-quality/checks/structural';
 import { completenessCheck } from './data-quality/checks/completeness';
 import { HashChainAuditLog } from './audit/audit-log';
 import { AuthorizationService } from './security/permissions';
 import { LocalFileOffsite, BackupManager } from './backup/backup-manager';
 import { DashboardServer } from './dashboard/server';
-import { TwelveDataWsSource } from './ingestion/twelvedata-ws';
-import { XausApiSource } from './ingestion/xaus-api';
-import { XauSourceManager } from './ingestion/xau-source-manager';
+import { TwelveDataWsSource, TIMEFRAMES } from './ingestion/twelvedata-ws';
 import { loadBinanceHistory } from './ingestion/binance-history';
+import { toCanonical, assessUsability } from './normalization/canonical';
 import type { RawDataPoint } from './core/types';
 import type { Candle } from './data-quality/checks/base';
 import type { FeatureComputeResult } from './feature-engineering/types';
 
 const PAXG_SYMBOL = 'paxgusdt';
 const PAXG_BINANCE = 'PAXGUSDT';
-const INTERVAL = process.argv[2] || '1m';
 const PORT = parseInt(process.env.PORT || '3000');
 const TD_KEY = process.env.TWELVEDATA_API_KEY || '';
 
+const DISPLAY_TFS = ['1m', '5m', '15m', '1h', '4h', '1d', '1w'];
+const historiesByTf = new Map<string, RawDataPoint<Candle>[]>();
 const paxgHistory: RawDataPoint<Candle>[] = [];
-const xauHistory: RawDataPoint<Candle>[] = [];
-const MAX_HISTORY = 100;
+const MAX_HISTORY = 300;
 let lastPaxgKlineStart = 0;
-let activeSourceName = 'none';
+
+for (const tf of TIMEFRAMES) historiesByTf.set(tf.label, []);
 
 function fmt(r: FeatureComputeResult | undefined, need: string): string {
   if (!r || r.value === null || r.value === undefined) return need;
@@ -40,11 +40,9 @@ function filterByCutoff(history: RawDataPoint<Candle>[], cutoff: string): RawDat
 }
 
 async function main() {
-  console.log('\n=== FALK GOLD Live (Multi-Source Failover) ===');
-  console.log('   Primary:   TwelveData WebSocket (~170ms)');
-  console.log('   Backup 1:  xaus.com REST (no key)');
-  console.log('   Backup 2:  Binance PAXG (gold token)');
-  console.log('   Dashboard: http://localhost:' + PORT + '\n');
+  console.log('\n=== FALK GOLD Live (7 Timeframes + Normalization) ===');
+  console.log('   Timeframes: ' + DISPLAY_TFS.join(' | '));
+  console.log('   Dashboard:  http://localhost:' + PORT + '\n');
 
   const dashboard = new DashboardServer(PORT);
   dashboard.start();
@@ -52,109 +50,152 @@ async function main() {
   const audit = new HashChainAuditLog();
   const auth = new AuthorizationService(audit);
   const reg = new FeatureRegistry();
-  reg.register(sma20); reg.register(rsi14); reg.register(atr14);
+
+  for (const tf of TIMEFRAMES) {
+    reg.register(makeSma20(tf.label, tf.ms));
+    reg.register(makeRsi14(tf.label, tf.ms));
+    reg.register(makeAtr14(tf.label, tf.ms));
+  }
 
   const sink = new LocalFileOffsite('.backup');
   const backup = new BackupManager(audit, { rpoMs: 60000, rtoMs: 5000, offsiteRequired: true }, sink);
 
-  const processCandle = function (sourceLabel: string, point: RawDataPoint<Candle>): void {
+  const processCandle = function (tfLabel: string, point: RawDataPoint<Candle>): void {
     try {
       const cutoff = point.availabilityTime;
-      const filteredPaxg = filterByCutoff(paxgHistory, cutoff);
-      const filteredXau = filterByCutoff(xauHistory, cutoff);
-      const sources: Array<{ sourceId: string; points: RawDataPoint<Candle>[] }> = [];
-      if (filteredPaxg.length > 0) sources.push({ sourceId: 'binance-paxg', points: filteredPaxg });
-      if (filteredXau.length > 0) sources.push({ sourceId: 'gold-xau', points: filteredXau });
-      const primary = filteredXau.length > 0 ? filteredXau : filteredPaxg;
+      const hist = filterByCutoff(historiesByTf.get(tfLabel) || [], cutoff);
+      if (hist.length === 0) return;
+
+      const canonical = toCanonical(point, tfLabel as any);
+      const usability = assessUsability(canonical);
+
+      const sources: Array<{ sourceId: string; points: RawDataPoint<Candle>[] }> = [
+        { sourceId: 'gold-xau', points: hist }
+      ];
+      if (tfLabel === '1m' && paxgHistory.length > 0) {
+        const filtered = filterByCutoff(paxgHistory, cutoff);
+        if (filtered.length > 0) sources.push({ sourceId: 'binance-paxg', points: filtered });
+      }
 
       const result = runPipeline({
-        taskId: 'live-' + point.fingerprint,
+        taskId: 'live-' + tfLabel + '-' + point.fingerprint,
         requestId: 'req-' + point.fingerprint,
         actor: { principalId: 'system', roles: ['ANALYST'] },
         asOfCutoff: cutoff,
-        snapshotRef: { snapshotId: 'live', contentFingerprint: point.fingerprint },
+        snapshotRef: { snapshotId: 'live-' + tfLabel, contentFingerprint: point.fingerprint },
         sources,
         fusionPolicy: {
-          policyVersion: 'gold-v2',
+          policyVersion: 'gold-multitf-v4',
           priorityOrder: ['gold-xau', 'binance-paxg'],
           conflictStrategy: 'STRICT_PRIORITY',
           toleranceBps: 100,
-          allowSourceSwitching: false
+          allowSourceSwitching: false,
         },
         featureTargets: [
-          { featureId: 'sma_20', definitionVersion: '1.0.0' },
-          { featureId: 'rsi_14', definitionVersion: '1.0.0' },
-          { featureId: 'atr_14', definitionVersion: '1.0.0' }
+          { featureId: 'sma_20_' + tfLabel, definitionVersion: '1.0.0' },
+          { featureId: 'rsi_14_' + tfLabel, definitionVersion: '1.0.0' },
+          { featureId: 'atr_14_' + tfLabel, definitionVersion: '1.0.0' },
         ],
         featureInputs: new Map([
-          ['sma_20', primary], ['rsi_14', primary], ['atr_14', primary]
-        ])
+          ['sma_20_' + tfLabel, hist],
+          ['rsi_14_' + tfLabel, hist],
+          ['atr_14_' + tfLabel, hist],
+        ]),
       }, { qualityChecks: [structuralCheck, completenessCheck], featureRegistry: reg, audit, auth });
 
-      const sma = result.features.get('sma_20');
-      const rsi = result.features.get('rsi_14');
-      const atr = result.features.get('atr_14');
+      const sma = result.features.get('sma_20_' + tfLabel);
+      const rsi = result.features.get('rsi_14_' + tfLabel);
+      const atr = result.features.get('atr_14_' + tfLabel);
       const smaVal = typeof sma?.value === 'number' ? sma.value : null;
       const rsiVal = typeof rsi?.value === 'number' ? rsi.value : null;
       const atrVal = typeof atr?.value === 'number' ? atr.value : null;
 
-      dashboard.broadcast({ type: 'candle', data: { symbol: sourceLabel, ...point }, status: result.executionStatus });
-      if (result.qualityAfter) dashboard.broadcast({ type: 'quality', data: { status: result.qualityAfter.overallStatus, suitable: result.qualityAfter.suitableForTask } });
-      if (result.fused) dashboard.broadcast({ type: 'fusion', data: { value: result.fused.value, conflict: result.fused.conflictStatus } });
-      dashboard.broadcast({ type: 'feature', data: { name: 'sma', value: smaVal } });
-      dashboard.broadcast({ type: 'feature', data: { name: 'rsi', value: rsiVal } });
-      dashboard.broadcast({ type: 'feature', data: { name: 'atr', value: atrVal } });
-      dashboard.broadcast({ type: 'task', data: { state: result.finalState, exec: result.executionStatus } });
+      dashboard.broadcast({ type: 'candle', timeframe: tfLabel, data: { symbol: 'XAU', ...point }, status: result.executionStatus });
+      dashboard.broadcast({ type: 'feature', timeframe: tfLabel, data: { name: 'sma', value: smaVal } });
+      dashboard.broadcast({ type: 'feature', timeframe: tfLabel, data: { name: 'rsi', value: rsiVal } });
+      dashboard.broadcast({ type: 'feature', timeframe: tfLabel, data: { name: 'atr', value: atrVal } });
+      dashboard.broadcast({ type: 'task', timeframe: tfLabel, data: { state: result.finalState, exec: result.executionStatus } });
 
-      const snap = backup.takeSnapshot('INCREMENTAL', JSON.stringify({ source: sourceLabel, candle: point, features: { sma20: smaVal, rsi14: rsiVal, atr14: atrVal }, executionStatus: result.executionStatus }), 'live-runner');
-      dashboard.broadcast({ type: 'worm', data: { id: snap.snapshotId, total: sink.count(), last: snap.snapshotId } });
+      dashboard.broadcast({
+        type: 'quality',
+        timeframe: tfLabel,
+        data: {
+          status: result.qualityAfter?.overallStatus ?? (usability.suitable_for.rsi_atr ? 'PASS' : 'FAIL'),
+          suitable: result.qualityAfter?.suitableForTask ?? usability.suitable_for.rsi_atr,
+          volume_semantics: canonical.volume_semantics,
+        },
+      });
 
-      console.log('[' + sourceLabel + '] C=' + point.value.close.toFixed(2) + ' | ' + result.executionStatus + ' | SMA=' + fmt(sma, 'N/A') + ' RSI=' + fmt(rsi, 'N/A') + ' ATR=' + fmt(atr, 'N/A'));
-    } catch (e) { console.error('[ERROR ' + sourceLabel + ']', (e as Error).message); }
+      if (result.fused) {
+        dashboard.broadcast({ type: 'fusion', timeframe: tfLabel, data: { value: result.fused.value, conflict: result.fused.conflictStatus } });
+      }
+
+      if (tfLabel === '1m' || tfLabel === '15m' || tfLabel === '1h') {
+        const snap = backup.takeSnapshot('INCREMENTAL', JSON.stringify({
+          timeframe: tfLabel,
+          canonical,
+          features: { sma20: smaVal, rsi14: rsiVal, atr14: atrVal },
+          executionStatus: result.executionStatus,
+          usability,
+        }), 'live-runner');
+        dashboard.broadcast({ type: 'worm', data: { id: snap.snapshotId, total: sink.count(), last: snap.snapshotId } });
+      }
+
+      console.log('[' + tfLabel + '] C=' + point.value.close.toFixed(2) +
+        ' | vol=' + canonical.volume_value + '(' + canonical.volume_semantics + ')' +
+        ' | ' + result.executionStatus +
+        ' | SMA=' + fmt(sma, 'N/A') + ' RSI=' + fmt(rsi, 'N/A') + ' ATR=' + fmt(atr, 'N/A'));
+    } catch (e) {
+      console.error('[ERROR ' + tfLabel + ']', (e as Error).message);
+    }
   };
 
-  const xauHandler = function (p: RawDataPoint<Candle>, isHistory: boolean): void {
-    xauHistory.push(p);
-    if (xauHistory.length > MAX_HISTORY) xauHistory.shift();
-    if (isHistory) { dashboard.broadcast({ type: 'candle', data: { symbol: 'XAU', ...p }, status: 'BACKFILL' }); return; }
-    processCandle('XAU', p);
+  const onCandle = function (tfLabel: string, p: RawDataPoint<Candle>, isHistory: boolean): void {
+    const hist = historiesByTf.get(tfLabel) || [];
+    hist.push(p);
+    if (hist.length > MAX_HISTORY) hist.shift();
+    historiesByTf.set(tfLabel, hist);
+
+    if (isHistory) {
+      dashboard.broadcast({ type: 'candle', timeframe: tfLabel, data: { symbol: 'XAU', ...p }, status: 'BACKFILL' });
+      return;
+    }
+    processCandle(tfLabel, p);
   };
 
-  // === Backfill PAXG (instant history) ===
   try {
-    console.log('[PAXG] Loading 100 historical bars...');
+    console.log('[PAXG] Loading 100 bars (1m backup)...');
     const hist = await loadBinanceHistory(PAXG_BINANCE, 100);
-    for (const p of hist) { paxgHistory.push(p); dashboard.broadcast({ type: 'candle', data: { symbol: 'PAXG', ...p }, status: 'BACKFILL' }); }
+    for (const p of hist) {
+      paxgHistory.push(p);
+      dashboard.broadcast({ type: 'candle', timeframe: '1m', data: { symbol: 'PAXG', ...p }, status: 'BACKFILL' });
+    }
     console.log('[PAXG] Loaded ' + hist.length + ' bars');
-  } catch (e) { console.error('[PAXG] History failed:', (e as Error).message); }
+  } catch (e) {
+    console.error('[PAXG] History:', (e as Error).message);
+  }
 
-  // === Multi-source XAU with failover ===
-  const manager = new XauSourceManager(
-    { switchAfterMs: 30000, cooldownMs: 300000 },
-    (name) => { activeSourceName = name; console.log('[Failover] >>> ACTIVE: ' + name); },
-  );
+  if (TD_KEY) {
+    const td = new TwelveDataWsSource(
+      TD_KEY, 'XAU/USD', TIMEFRAMES,
+      onCandle,
+      (price, ts) => { dashboard.broadcast({ type: 'tick', data: { source: 'XAU', price, ts } }); },
+      () => {},
+    );
+    await td.start();
+    process.on('SIGINT', () => { td.stop(); });
+  } else {
+    console.warn('[TD] No TWELVEDATA_API_KEY');
+  }
 
-  // priority 0 = primary
-  const td = TD_KEY ? new TwelveDataWsSource(TD_KEY, 'XAU/USD', xauHandler,
-    (price, ts) => { manager.notifyTick('twelvedata-ws'); dashboard.broadcast({ type: 'tick', data: { source: 'XAU', price, ts } }); },
-    (healthy) => { /* manager internally tracks */ },
-  ) : null;
-
-  const xaus = new XausApiSource(xauHandler,
-    (price, ts) => { manager.notifyTick('xaus-api'); dashboard.broadcast({ type: 'tick', data: { source: 'XAU', price, ts } }); },
-    (healthy) => { /* manager internally tracks */ },
-    10000,
-  );
-
-  if (td) manager.register(td, 0);
-  manager.register(xaus, 1);
-  manager.start();
-  // === PAXG live ===
-  const url = 'wss://stream.binance.com:9443/stream?streams=' + PAXG_SYMBOL + '@kline_' + INTERVAL + '/' + PAXG_SYMBOL + '@ticker';
+  const url = 'wss://stream.binance.com:9443/stream?streams=' + PAXG_SYMBOL + '@kline_1m/' + PAXG_SYMBOL + '@ticker';
   const connect = function (): void {
     const ws = new WebSocket(url);
     let pingTimer: NodeJS.Timeout | null = null;
-    ws.on('open', () => { console.log('[WS] PAXG connected'); pingTimer = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.ping(); }, 30000); });
+    ws.on('open', () => {
+      console.log('[WS] PAXG connected');
+      pingTimer = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.ping(); }, 30000);
+    });
     ws.on('message', (data: WebSocket.RawData) => {
       try {
         const msg = JSON.parse(data.toString());
@@ -165,8 +206,10 @@ async function main() {
           return;
         }
         if (msg.stream.indexOf('@kline_') >= 0) {
-          const k = msg.data.k; if (!k || !k.x) return;
-          if (k.t <= lastPaxgKlineStart) return; lastPaxgKlineStart = k.t;
+          const k = msg.data.k;
+          if (!k || !k.x) return;
+          if (k.t <= lastPaxgKlineStart) return;
+          lastPaxgKlineStart = k.t;
           const p: RawDataPoint<Candle> = {
             sourceId: 'binance-paxg',
             value: { open: parseFloat(k.o), high: parseFloat(k.h), low: parseFloat(k.l), close: parseFloat(k.c), volume: parseFloat(k.v) },
@@ -174,19 +217,30 @@ async function main() {
             closedAt: new Date(k.T + 1).toISOString(),
             arrivalTime: new Date().toISOString(),
             availabilityTime: new Date(k.T + 1).toISOString(),
-            version: 1, fingerprint: PAXG_SYMBOL + '-' + k.t,
+            version: 1,
+            fingerprint: PAXG_SYMBOL + '-' + k.t,
           };
-          paxgHistory.push(p); if (paxgHistory.length > MAX_HISTORY) paxgHistory.shift();
-          processCandle('PAXG', p);
+          paxgHistory.push(p);
+          if (paxgHistory.length > MAX_HISTORY) paxgHistory.shift();
         }
-      } catch (e) { console.warn('[WS] parse:', (e as Error).message); }
+      } catch (e) {
+        console.warn('[WS] parse:', (e as Error).message);
+      }
     });
-    ws.on('close', () => { if (pingTimer) clearInterval(pingTimer); console.warn('[WS] PAXG closed, reconnect in 5s'); setTimeout(connect, 5000); });
-    ws.on('error', (e) => console.error('[WS] PAXG error:', e.message));
+    ws.on('close', () => {
+      if (pingTimer) clearInterval(pingTimer);
+      console.warn('[WS] PAXG closed, 5s');
+      setTimeout(connect, 5000);
+    });
+    ws.on('error', (e) => console.error('[WS] PAXG:', e.message));
   };
   connect();
 
-  process.on('SIGINT', () => { console.log('\n[SHUTDOWN]'); manager.stop(); dashboard.stop(); process.exit(0); });
+  process.on('SIGINT', () => {
+    console.log('\n[SHUTDOWN]');
+    dashboard.stop();
+    process.exit(0);
+  });
 }
 
 main().catch(console.error);
