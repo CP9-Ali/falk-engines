@@ -110,3 +110,45 @@ This document records **deliberate deviations** from `FALK_Data_Engines_Detailed
 ---
 
 **7 active deviations, all approved and documented. H3 fully implemented.**
+---
+
+### Deviation 8 ó ß6 Quality Report not fully structured
+
+**Spec (ß6.5)**: Quality report must include check_id, data snapshot, source, instrument, timeframe, range, evaluated_at, rules_version, checks, defects, warnings, usage decision.
+
+**Implementation**: `QualityVerdict` contains:
+- ? dataReference (snapshot)
+- ? findings (checks)
+- ? overallStatus (decision)
+- ? evaluatedAt, asOfCutoff, policyVersion
+- ? `instrument` ó not present
+- ? `timeframe` ó not present
+- ? explicit `check_id` ó uses finding-level checkId instead
+
+**Impact**: Consumers cannot filter reports by instrument/timeframe directly. Workaround: infer from dataReference.
+
+**Approved by**: Project owner (2026-10-23) ó functional gap, not correctness gap.
+
+---
+
+### Deviation 9 ó ß6.6 per-check version
+
+**Spec (ß6.6)**: "·ﬂ· ›Õ’  ⁄—Ì› ÊÕœÊœ Ê„⁄·„«  »≈’œ«—" (each check has its own version + parameters)
+
+**Implementation**: `QualityCheck` has `checkId` only. No `checkVersion`, no `parameters`.
+
+**Impact**: When a check logic changes, older results are not distinguishable from newer without a global engine version. Global `configVersion` mitigates but doesn't fully solve.
+
+**Approved by**: Project owner (2026-10-23).
+
+---
+
+### Deviation 10 ó ß6.2 Duplicate record key
+
+**Spec (ß6.2)**: Record key includes source + instrument + timeframe + event time.
+
+**Implementation**: `duplicate.ts` uses `sourceId + '|' + eventTime` only.
+
+**Impact**: Same timestamp from different timeframes would be flagged as duplicate incorrectly. **Rarely triggered** because each pipeline run uses one timeframe.
+
+**Approved by**: Project owner (2026-10-23).
