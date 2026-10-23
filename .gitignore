@@ -57,3 +57,9 @@ backups/
 *.env
 .env.*
 !.env.example
+
+.env
+
+.env
+.backup/
+*.env
