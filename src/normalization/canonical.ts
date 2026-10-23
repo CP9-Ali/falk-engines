@@ -43,6 +43,7 @@ export const VOLUME_SEMANTICS_BY_SOURCE: Record<string, VolumeSemantics> = {
   'binance-paxg': 'TICK',
   'fcsapi-xau': 'UNKNOWN',
   'xaus-api': 'UNKNOWN',
+  'h3-aggregated': 'UNKNOWN',
 };
 
 export const SOURCE_SYMBOL_BY_SOURCE: Record<string, string> = {
@@ -50,6 +51,7 @@ export const SOURCE_SYMBOL_BY_SOURCE: Record<string, string> = {
   'binance-paxg': 'PAXGUSDT',
   'fcsapi-xau': 'FX:XAUUSD',
   'xaus-api': 'XAUUSD',
+  'h3-aggregated': 'XAU/USD-AGG',
 };
 
 export const SOURCE_TIMEZONE: Record<string, string> = {
@@ -59,6 +61,7 @@ export const SOURCE_TIMEZONE: Record<string, string> = {
   'fcsapi-xau': 'UTC',
   'forexfactory': 'America/New_York',
   'finnhub': 'UTC',
+  'h3-aggregated': 'UTC',
 };
 
 export const PRECISION_BY_SOURCE: Record<string, { decimal_places: number; tick_size: number; price_unit: string; volume_unit: string }> = {
@@ -66,6 +69,7 @@ export const PRECISION_BY_SOURCE: Record<string, { decimal_places: number; tick_
   'binance-paxg': { decimal_places: 2, tick_size: 0.01, price_unit: 'USD/oz', volume_unit: 'ticks' },
   'xaus-api': { decimal_places: 2, tick_size: 0.01, price_unit: 'USD/oz', volume_unit: 'unknown' },
   'fcsapi-xau': { decimal_places: 2, tick_size: 0.01, price_unit: 'USD/oz', volume_unit: 'unknown' },
+  'h3-aggregated': { decimal_places: 5, tick_size: 0.01, price_unit: 'USD/oz', volume_unit: 'unknown' },
 };
 
 export interface LineageRef {

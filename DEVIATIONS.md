@@ -1,6 +1,6 @@
 # FALK Engines — Deviations from Specification
 
-**Document version:** 1.0.0
+**Document version:** 2.0.0
 **Date:** 2026-10-23
 **Status:** Approved by project owner
 
@@ -8,175 +8,88 @@
 
 ## Purpose
 
-This document records **deliberate deviations** from `FALK_Data_Engines_Detailed_Specification.docx`. Each deviation is documented with its justification, impact, and approval status. The specification's §2 principle "every change to rules, settings, or equations produces a new version" is honored here: we are not silently hiding deviations, we are recording them.
+This document records **deliberate deviations** from `FALK_Data_Engines_Detailed_Specification.docx`. Each deviation is documented with justification, impact, and approval. Per §2, we do not silently hide deviations — we record them.
 
 ---
 
-## Deviation 1 — Timeframes
+## Changes since v1.0.0
 
-### Specification (§1)
-> "األطر: M5 و M1 و H4 و H3 و M15 و W1"
-> (M1, M5, M15, H3, H4, W1 — 6 timeframes)
-
-### Implementation
-> 1m, 5m, 15m, **1h**, 4h, **1d**, 1w (7 timeframes)
-
-### Change
-| Spec timeframe | Implemented | Status |
-|---------------|:-----------:|:------:|
-| M1 | 1m | ✅ |
-| M5 | 5m | ✅ |
-| M15 | 15m | ✅ |
-| **H3** | (removed) | ❌ **DELIBERATE** |
-| H4 | 4h | ✅ |
-| W1 | 1w | ✅ |
-| (not in spec) | 1h | ➕ **ADDED** |
-| (not in spec) | 1d | ➕ **ADDED** |
-
-### Justification
-- **H3 removed:** TwelveData does not provide H3 directly. Building H3 from 3×1h requires either (a) a hidden 1h stream (which we have, but the owner chose simplicity) or (b) accepting the H3 gaps. The owner decided H3 adds complexity without proportional analytical value for the current use case.
-- **1h added:** Provides a natural middle ground between 15m (intraday noise) and 4h (swing horizon). Owner requested it explicitly.
-- **1d added:** Daily close is the standard reference in gold analysis. Owner requested it explicitly.
-
-### Impact
-- Aggregation testing (`compareTimeframes`) still works for 5m/15m/1h/4h.
-- Replay works for all 7 implemented timeframes.
-- Any consumer expecting H3 candles will receive none.
-
-### Approval
-- **Approved by:** Project owner (CP9-Ali)
-- **Date:** 2026-10-23
+**H3 is now IMPLEMENTED.** Deviation 1 (H3 removed) is closed. H3 is now built via `H3Aggregator` from 3×1h candles, aligned to 3-hour boundaries.
 
 ---
 
-## Deviation 2 — TwelveData rate limits
+## Current Deviations (6)
 
-### Specification (§5)
-> "Rate Limit Manager: احترام حدود المصدر — تجنب حلقات الطلبات السريعة"
+### Deviation 1 — 1h and 1d added
 
-### Implementation
-`src/ingestion/rate-limiter.ts` enforces:
-- `max_per_minute: 8`
-- `max_per_day: 800`
-- `min_interval_ms: 7500`
+**Spec (§1)**: M1, M5, M15, H3, H4, W1 (6 timeframes)
+**Implementation**: 1m, 5m, 15m, 1h, H3, 4h, 1d, 1w (8 timeframes)
 
-### Justification
-These match TwelveData's **free tier** (documented in `SourceRegistry`). The paid tier allows more, but the owner is using free tier.
+**Added:**
+- `1h` — requested by owner (mid-point between 15m and 4h)
+- `1d` — standard daily close reference
 
-### Impact
-- History loading is throttled (7 timeframes × ~8s each = ~1 min).
-- Once fully loaded, WebSocket ticks are not rate-limited (no API calls).
+**Impact**: consumers get 8 instead of 6. All 6 spec timeframes are present.
 
-### Approval
-- **Approved by:** Project owner
+**Approved by**: Project owner.
 
 ---
 
-## Deviation 3 — ForexFactory, not official economic calendar
+### Deviation 2 — Free-tier rate limits
 
-### Specification (§11)
-> "إدارة األخبار واألحداث الزمنية"
+**Spec (§5)**: enforce source rate limits
+**Implementation**: `rate-limiter.ts` uses TwelveData free-tier documented limits (8/min, 800/day, 7.5s min interval)
 
-### Implementation
-`src/events/forexfactory-calendar.ts` uses **faireconomy.media** (ForexFactory mirror).
-
-### Justification
-- Official ForexFactory API requires license.
-- faireconomy.media provides the same data, free, weekly.
-- Aggregator, not primary source. Acceptable for analysis-only system.
-
-### Impact
-- 1-week lookback/forward only.
-- If faireconomy goes down, events are stale.
-
-### Approval
-- **Approved by:** Project owner
+**Approved by**: Project owner.
 
 ---
 
-## Deviation 4 — Heuristic sentiment (not ML)
+### Deviation 3 — ForexFactory (faireconomy.media) as calendar source
 
-### Specification (§11)
-> "صنّف األخبار حسب األهمية"
+**Spec (§11)**: manage economic events
+**Implementation**: `forexfactory-calendar.ts` uses faireconomy.media mirror (free, weekly)
 
-### Implementation
-`src/events/finnhub-news.ts` uses keyword-based heuristic (`heuristic_v1`).
-
-### Justification
-- No ML model available.
-- §10 says "لا تنشئ Delta أو CVD من OHLC" — we extended this principle: don't claim ML-level sentiment from keywords.
-- Sentiment is explicitly labeled `heuristic_v1` in every result — no false precision.
-
-### Impact
-- Sentiment is directional (BULLISH/BEARISH/NEUTRAL), not graded.
-- False positives possible for ambiguous headlines.
-
-### Approval
-- **Approved by:** Project owner
+**Approved by**: Project owner.
 
 ---
 
-## Deviation 5 — No H3 aggregation
+### Deviation 4 — Heuristic sentiment (not ML)
 
-### Specification (§10)
-> "إذا بُني H1 من M5، يجب توثيق حدود الساعة وطريقة التعامل مع M5 الناقصة"
+**Spec (§11)**: classify news
+**Implementation**: `finnhub-news.ts` uses keyword heuristic labeled `heuristic_v1` in every result
 
-### Implementation
-Aggregation exists for M1 → M5/M15/H1/H4. **H3 is not built** (see Deviation 1).
-
-### Justification
-- Spec allows H3 from 3×1h. Since H3 is removed (Deviation 1), this clause is moot.
-- If H3 is restored later, `aggregateCandles` supports it (tested in `multi-timeframe.test.ts`).
-
-### Impact
-- None for the current 7 timeframes.
-
-### Approval
-- **Approved by:** Project owner
+**Approved by**: Project owner.
 
 ---
 
-## Deviation 6 — No order book / Level-2
+### Deviation 5 — No Level-2 / order book
 
-### Specification (§6.4)
-> "Order Book Imbalance: تحديثات دفتر أوامر بتوقيت مناسب"
+**Spec (§6.4)**: order flow analysis
+**Implementation**: `SourceRegistry` marks `orderbook: 'UNKNOWN'` for TwelveData. Binance PAXG has it but not consumed.
 
-### Implementation
-`SourceRegistry` marks `orderbook: 'UNKNOWN'` for TwelveData. Binance PAXG has it but we don't consume it.
+**Impact**: `suitable_for.order_flow = false`, `suitable_for.delta_cvd = false` in every usability report.
 
-### Justification
-- Owner's use case is price analysis, not microstructure.
-- Adding Level-2 requires significant bandwidth and processing.
-
-### Impact
-- `suitable_for.order_flow = false` in every usability report.
-- `suitable_for.delta_cvd = false` (requires bid/ask trades).
-
-### Approval
-- **Approved by:** Project owner
+**Approved by**: Project owner.
 
 ---
 
-## Deviation 7 — No real trade execution
+### Deviation 6 — No real trade execution
 
-### Specification (§2.12)
-> "FALK للتحليل واإلشارات فقط وال ينفذ صفقات حقيقية"
-
-### Implementation
-**No execution code exists.** This is compliance, not deviation. Listed here for completeness.
+**Spec (§2.12)**: analysis only, no execution
+**Implementation**: no execution code. This is compliance, not deviation. Listed for completeness.
 
 ---
 
 ## Summary
 
-| # | Deviation | Type | Approved |
-|---|-----------|:----:|:--------:|
-| 1 | H3 removed, 1h + 1d added | Deliberate | ✅ |
-| 2 | Free-tier rate limits | Environmental | ✅ |
-| 3 | ForexFactory mirror | Practical | ✅ |
-| 4 | Heuristic sentiment | Honest labeling | ✅ |
-| 5 | No H3 aggregation | Follows #1 | ✅ |
-| 6 | No Level-2 | Scope choice | ✅ |
-| 7 | Analysis only | Compliance | ✅ |
+| # | Deviation | Status |
+|---|-----------|:------:|
+| — | **H3 aggregation** | ✅ **RESOLVED** (Wave 4) |
+| 1 | 1h + 1d added | ✅ |
+| 2 | Free-tier rate limits | ✅ |
+| 3 | ForexFactory mirror | ✅ |
+| 4 | Heuristic sentiment | ✅ |
+| 5 | No Level-2 | ✅ |
+| 6 | Analysis only | ✅ |
 
-**All deviations are documented, justified, and approved. No silent changes.**
+**6 active deviations, all approved and documented. H3 now fully implemented.**

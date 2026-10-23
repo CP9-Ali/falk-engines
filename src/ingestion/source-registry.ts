@@ -118,6 +118,7 @@ export class SourceRegistry {
     this.register(this.defaultTwelveData());
     this.register(this.defaultBinancePaxg());
     this.register(this.defaultXausApi());
+    this.register(this.defaultH3Aggregated());
   }
 
   register(cap: SourceCapability): void {
@@ -265,6 +266,42 @@ export class SourceRegistry {
         commercial_use: 'UNVERIFIED',
         redistribution: 'UNVERIFIED',
         notes: 'Binance terms; PAXG = tick volume, not physical gold volume',
+      },
+      config_version: '1.0.0',
+    };
+  }
+
+  private defaultH3Aggregated(): SourceCapability {
+    return {
+      source_id: 'h3-aggregated',
+      source_name: 'XAUUSD H3 Aggregated (3x 1h)',
+      source_type: 'api',
+      connection_type: 'rest',
+      instrument_id: 'XAU/USD',
+      canonical_symbol: 'XAUUSD',
+      data_capabilities: {
+        ohlc: 'VERIFIED',
+        tick: 'UNKNOWN',
+        orderbook: 'UNKNOWN',
+        volume: 'UNVERIFIED',
+        news: 'UNKNOWN',
+      },
+      timestamp_semantics: 'event_time_utc',
+      volume_semantics: 'UNKNOWN',
+      historical_coverage: {
+        from: null,
+        to: 'now',
+        status: 'VERIFIED',
+      },
+      rate_limits: {
+        per_minute: null,
+        per_day: null,
+        status: 'UNKNOWN',
+      },
+      license_and_retention: {
+        commercial_use: 'UNVERIFIED',
+        redistribution: 'UNVERIFIED',
+        notes: 'Derived from 1h candles - inherits TwelveData terms',
       },
       config_version: '1.0.0',
     };
