@@ -1,6 +1,5 @@
 import WebSocket from 'ws';
 import 'dotenv/config';
-import { SourceRegistry } from './ingestion/source-registry';
 import { runPipeline } from './integration/pipeline';
 import { FeatureRegistry } from './feature-engineering/registry';
 import { makeSma20, makeRsi14, makeAtr14 } from './feature-engineering/financial';
@@ -14,6 +13,8 @@ import { TwelveDataWsSource, TIMEFRAMES, type RawInfo } from './ingestion/twelve
 import { loadBinanceHistory } from './ingestion/binance-history';
 import { toCanonical, assessUsability, type LineageRef } from './normalization/canonical';
 import { RawStore } from './storage/raw-store';
+import { SourceRegistry } from './ingestion/source-registry';
+import { aggregateCandles, compareTimeframes } from './multi-timeframe/aggregator';
 import type { RawDataPoint } from './core/types';
 import type { Candle } from './data-quality/checks/base';
 import type { FeatureComputeResult } from './feature-engineering/types';
@@ -41,8 +42,20 @@ function filterByCutoff(history: RawDataPoint<Candle>[], cutoff: string): RawDat
   return history.filter(p => new Date(p.availabilityTime).getTime() <= ms);
 }
 
+function tfToMult(tf: string): number {
+  switch (tf) {
+    case '5m': return 5;
+    case '15m': return 15;
+    case '1h': return 60;
+    case '4h': return 240;
+    case '1d': return 1440;
+    case '1w': return 10080;
+    default: return 1;
+  }
+}
+
 async function main() {
-  console.log('\n=== FALK GOLD Live (7 TF + Normalization + Raw Storage) ===');
+  console.log('\n=== FALK GOLD Live (7 TF + Normalization + Raw Storage + Comparison) ===');
   console.log('   Timeframes: ' + DISPLAY_TFS.join(' | '));
   console.log('   Dashboard:  http://localhost:' + PORT + '\n');
 
@@ -70,15 +83,38 @@ async function main() {
       if (hist.length === 0) return;
 
       const canonical = toCanonical(point, tfLabel as any, lineage);
-           // §4: ÊÍÞÞ ãä ÕÍÉ ÇáãÕÏÑ áåÐÇ ÇáÇÓÊÎÏÇã
+      const usability = assessUsability(canonical);
+
       const useCheck = registry.validateUse(point.sourceId, 'rsi_atr');
       if (!useCheck.allowed) {
-        console.warn('[' + tfLabel + '] SKIP — ' + useCheck.reason);
+        console.warn('[' + tfLabel + '] SKIP - ' + useCheck.reason);
         registry.markFailure(point.sourceId);
         return;
       }
       registry.markSuccess(point.sourceId);
-      const usability = assessUsability(canonical);
+
+      let aggComparison = '';
+      if (tfLabel === '5m' || tfLabel === '15m' || tfLabel === '1h' || tfLabel === '4h') {
+        const oneMinuteHistory = historiesByTf.get('1m') || [];
+        if (oneMinuteHistory.length >= 5) {
+          const aggregated = aggregateCandles(oneMinuteHistory, '1m', tfLabel as any);
+          const bucketSize = 60_000 * tfToMult(tfLabel);
+          const currentBucketStart = Math.floor(new Date(point.eventTime).getTime() / bucketSize) * bucketSize;
+          const aggPoint = aggregated.find(a => new Date(a.point.eventTime).getTime() === currentBucketStart);
+
+          if (aggPoint && aggPoint.complete) {
+            const cmp = compareTimeframes(aggPoint.point, point, 100);
+            aggComparison = ' | agg_vs_12d=' + (cmp.matches ? 'OK' : 'DIVERGE(' + cmp.divergence_bps + 'bps)');
+            if (!cmp.matches) {
+              dashboard.broadcast({
+                type: 'error',
+                timeframe: tfLabel,
+                data: { message: 'TF divergence: ' + tfLabel + ' vs 1m-aggregated = ' + cmp.divergence_bps + ' bps' },
+              });
+            }
+          }
+        }
+      }
 
       const sources: Array<{ sourceId: string; points: RawDataPoint<Candle>[] }> = [
         { sourceId: 'gold-xau', points: hist }
@@ -94,25 +130,25 @@ async function main() {
         actor: { principalId: 'system', roles: ['ANALYST'] },
         asOfCutoff: cutoff,
         snapshotRef: { snapshotId: 'live-' + tfLabel, contentFingerprint: point.fingerprint },
-        sources,
+        sources: sources,
         fusionPolicy: {
-          policyVersion: 'gold-multitf-v5',
+          policyVersion: 'gold-multitf-v6',
           priorityOrder: ['gold-xau', 'binance-paxg'],
           conflictStrategy: 'STRICT_PRIORITY',
           toleranceBps: 100,
-          allowSourceSwitching: false,
+          allowSourceSwitching: false
         },
         featureTargets: [
           { featureId: 'sma_20_' + tfLabel, definitionVersion: '1.0.0' },
           { featureId: 'rsi_14_' + tfLabel, definitionVersion: '1.0.0' },
-          { featureId: 'atr_14_' + tfLabel, definitionVersion: '1.0.0' },
+          { featureId: 'atr_14_' + tfLabel, definitionVersion: '1.0.0' }
         ],
         featureInputs: new Map([
           ['sma_20_' + tfLabel, hist],
           ['rsi_14_' + tfLabel, hist],
-          ['atr_14_' + tfLabel, hist],
-        ]),
-      }, { qualityChecks: [structuralCheck, completenessCheck], featureRegistry: reg, audit, auth });
+          ['atr_14_' + tfLabel, hist]
+        ])
+      }, { qualityChecks: [structuralCheck, completenessCheck], featureRegistry: reg, audit: audit, auth: auth });
 
       const sma = result.features.get('sma_20_' + tfLabel);
       const rsi = result.features.get('rsi_14_' + tfLabel);
@@ -133,8 +169,8 @@ async function main() {
         data: {
           status: result.qualityAfter?.overallStatus ?? (usability.suitable_for.rsi_atr ? 'PASS' : 'FAIL'),
           suitable: result.qualityAfter?.suitableForTask ?? usability.suitable_for.rsi_atr,
-          volume_semantics: canonical.volume_semantics,
-        },
+          volume_semantics: canonical.volume_semantics
+        }
       });
 
       if (result.fused) {
@@ -144,19 +180,24 @@ async function main() {
       if (tfLabel === '1m' || tfLabel === '15m' || tfLabel === '1h') {
         const snap = backup.takeSnapshot('INCREMENTAL', JSON.stringify({
           timeframe: tfLabel,
-          canonical,
+          canonical: canonical,
           features: { sma20: smaVal, rsi14: rsiVal, atr14: atrVal },
           executionStatus: result.executionStatus,
-          usability,
+          usability: usability
         }), 'live-runner');
         dashboard.broadcast({ type: 'worm', data: { id: snap.snapshotId, total: sink.count(), last: snap.snapshotId } });
       }
 
-      console.log('[' + tfLabel + '] C=' + point.value.close.toFixed(2) +
+      const logLine =
+        '[' + tfLabel + '] C=' + point.value.close.toFixed(2) +
         ' | src=' + canonical.source_symbol + '(' + canonical.volume_semantics + ')' +
         ' | lineage=' + canonical.lineage_id.slice(0, 8) +
         ' | ' + result.executionStatus +
-        ' | SMA=' + fmt(sma, 'N/A') + ' RSI=' + fmt(rsi, 'N/A') + ' ATR=' + fmt(atr, 'N/A'));
+        ' | SMA=' + fmt(sma, 'N/A') +
+        ' RSI=' + fmt(rsi, 'N/A') +
+        ' ATR=' + fmt(atr, 'N/A') +
+        aggComparison;
+      console.log(logLine);
     } catch (e) {
       console.error('[ERROR ' + tfLabel + ']', (e as Error).message);
     }
@@ -187,7 +228,7 @@ async function main() {
         event_time_utc: rec.point.eventTime,
         fetch_method: 'history',
         fetched_at_utc: new Date().toISOString(),
-        payload: rec.rawRow,
+        payload: rec.rawRow
       });
       dashboard.broadcast({ type: 'candle', timeframe: '1m', data: { symbol: 'PAXG', ...rec.point }, status: 'BACKFILL' });
     }
@@ -200,11 +241,11 @@ async function main() {
     const td = new TwelveDataWsSource(
       TD_KEY, 'XAU/USD', TIMEFRAMES,
       onCandle,
-      (price, ts) => { dashboard.broadcast({ type: 'tick', data: { source: 'XAU', price, ts } }); },
-      () => {},
+      function (price, ts) { dashboard.broadcast({ type: 'tick', data: { source: 'XAU', price: price, ts: ts } }); },
+      function () { /* health */ }
     );
     await td.start();
-    process.on('SIGINT', () => { td.stop(); });
+    process.on('SIGINT', function () { td.stop(); });
   } else {
     console.warn('[TD] No TWELVEDATA_API_KEY');
   }
@@ -213,17 +254,17 @@ async function main() {
   const connect = function (): void {
     const ws = new WebSocket(url);
     let pingTimer: NodeJS.Timeout | null = null;
-    ws.on('open', () => {
+    ws.on('open', function () {
       console.log('[WS] PAXG connected');
-      pingTimer = setInterval(() => { if (ws.readyState === WebSocket.OPEN) ws.ping(); }, 30000);
+      pingTimer = setInterval(function () { if (ws.readyState === WebSocket.OPEN) ws.ping(); }, 30000);
     });
-    ws.on('message', (data: WebSocket.RawData) => {
+    ws.on('message', function (data: WebSocket.RawData) {
       try {
         const msg = JSON.parse(data.toString());
         if (!msg.stream || !msg.data) return;
         if (msg.stream.endsWith('@ticker')) {
           const price = parseFloat(msg.data.c);
-          if (Number.isFinite(price)) dashboard.broadcast({ type: 'tick', data: { source: 'PAXG', price, ts: new Date().toISOString() } });
+          if (Number.isFinite(price)) dashboard.broadcast({ type: 'tick', data: { source: 'PAXG', price: price, ts: new Date().toISOString() } });
           return;
         }
         if (msg.stream.indexOf('@kline_') >= 0) {
@@ -233,13 +274,16 @@ async function main() {
           lastPaxgKlineStart = k.t;
           const p: RawDataPoint<Candle> = {
             sourceId: 'binance-paxg',
-            value: { open: parseFloat(k.o), high: parseFloat(k.h), low: parseFloat(k.l), close: parseFloat(k.c), volume: parseFloat(k.v) },
+            value: {
+              open: parseFloat(k.o), high: parseFloat(k.h), low: parseFloat(k.l),
+              close: parseFloat(k.c), volume: parseFloat(k.v)
+            },
             eventTime: new Date(k.t).toISOString(),
             closedAt: new Date(k.T + 1).toISOString(),
             arrivalTime: new Date().toISOString(),
             availabilityTime: new Date(k.T + 1).toISOString(),
             version: 1,
-            fingerprint: PAXG_SYMBOL + '-' + k.t,
+            fingerprint: PAXG_SYMBOL + '-' + k.t
           };
           paxgHistory.push(p);
           if (paxgHistory.length > MAX_HISTORY) paxgHistory.shift();
@@ -250,23 +294,23 @@ async function main() {
             event_time_utc: p.eventTime,
             fetch_method: 'live-kline',
             fetched_at_utc: new Date().toISOString(),
-            payload: k,
+            payload: k
           });
         }
       } catch (e) {
         console.warn('[WS] parse:', (e as Error).message);
       }
     });
-    ws.on('close', () => {
+    ws.on('close', function () {
       if (pingTimer) clearInterval(pingTimer);
-      console.warn('[WS] PAXG closed, 5s');
+      console.warn('[WS] PAXG closed, reconnect in 5s');
       setTimeout(connect, 5000);
     });
-    ws.on('error', (e) => console.error('[WS] PAXG:', e.message));
+    ws.on('error', function (e) { console.error('[WS] PAXG:', e.message); });
   };
   connect();
 
-  process.on('SIGINT', () => {
+  process.on('SIGINT', function () {
     console.log('\n[SHUTDOWN]');
     dashboard.stop();
     process.exit(0);

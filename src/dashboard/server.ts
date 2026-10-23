@@ -14,7 +14,7 @@ export type DashboardEvent =
   | { type: 'fusion'; timeframe?: string; data: { value: number | null; conflict: string } }
   | { type: 'task'; timeframe?: string; data: { state: string; exec: string } }
   | { type: 'worm'; data: { id: string; total: number; last: string } }
-  | { type: 'error'; data: { message: string } };
+  | { type: 'error'; timeframe?: string; data: { message: string } };
 
 export class DashboardServer {
   private app = express();
