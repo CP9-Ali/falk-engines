@@ -35,6 +35,7 @@ export interface SourceCapability {
     readonly from: string | null;
     readonly to: string | null;
     readonly status: CapabilityStatus;
+    readonly verified_loaded_bars?: number;
   };
 
   readonly rate_limits: {
@@ -50,6 +51,9 @@ export interface SourceCapability {
   };
 
   readonly config_version: string;
+
+  /** ß4: „«  „ «· Õﬁﬁ „‰Â ›⁄·Ì« ›Ì runtime ó ·« «œ⁄«¡«  »·« œ·Ì· */
+  readonly verification_notes: ReadonlyArray<string>;
 }
 
 export interface ValidationResult {
@@ -63,7 +67,6 @@ export interface RuntimeStatus {
   readonly consecutive_failures: number;
 }
 
-/** Capacity matrix ‚Äî which source is verified for which use case */
 const CAPABILITY_MATRIX: Record<UseCase, (cap: SourceCapability) => ValidationResult> = {
   rsi_atr: (cap) => {
     if (cap.data_capabilities.ohlc !== 'VERIFIED') {
@@ -95,8 +98,8 @@ const CAPABILITY_MATRIX: Record<UseCase, (cap: SourceCapability) => ValidationRe
     }
     return { allowed: true, reason: 'OHLC + event_time comparable' };
   },
-  delta_cvd: () => ({ allowed: false, reason: 'requires trades with bid/ask ‚Äî not available' }),
-  order_flow: () => ({ allowed: false, reason: 'requires level-2 order book ‚Äî not available' }),
+  delta_cvd: () => ({ allowed: false, reason: 'requires trades with bid/ask ó not available' }),
+  order_flow: () => ({ allowed: false, reason: 'requires level-2 order book ó not available' }),
   news_analysis: (cap) => {
     if (cap.data_capabilities.news !== 'VERIFIED') {
       return { allowed: false, reason: 'news capability not verified' };
@@ -105,11 +108,6 @@ const CAPABILITY_MATRIX: Record<UseCase, (cap: SourceCapability) => ValidationRe
   },
 };
 
-/**
- * Registry of data sources with their capabilities (¬ß4).
- * Conservative: only VERIFIED when proven in code/docs.
- * Everything else = UNVERIFIED or UNKNOWN.
- */
 export class SourceRegistry {
   private readonly sources = new Map<string, SourceCapability>();
   private readonly runtime = new Map<string, RuntimeStatus>();
@@ -164,7 +162,6 @@ export class SourceRegistry {
     });
   }
 
-  /** ŸáŸÑ Ÿáÿ∞ÿß ÿßŸÑŸÖÿµÿØÿ± ÿµÿßŸÑÿ≠ ŸÑÿßÿ≥ÿ™ÿÆÿØÿßŸÖ ŸÖÿπŸäŸÜÿü */
   validateUse(sourceId: string, useCase: UseCase): ValidationResult {
     const cap = this.sources.get(sourceId);
     if (!cap) return { allowed: false, reason: 'unknown source_id' };
@@ -187,11 +184,10 @@ export class SourceRegistry {
     return Array.from(this.sources.values());
   }
 
-  /** ÿ™ŸÇÿ±Ÿäÿ± ŸÉÿßŸÖŸÑ ‚Äî ŸÑŸÑÿ≠ŸÅÿ∏ ŸÅŸä .backup/registry/ */
   snapshot(): Record<string, unknown> {
     return {
       generated_at: new Date().toISOString(),
-      registry_version: '1.0.0',
+      registry_version: '1.1.0',
       sources: this.all().map((cap) => ({
         ...cap,
         runtime: this.runtimeStatus(cap.source_id),
@@ -199,6 +195,18 @@ export class SourceRegistry {
     };
   }
 
+  /**
+   * ß4 + ß2.9: TwelveData WebSocket
+   * VERIFIED at runtime:
+   *   - OHLC loaded 100+ bars (1m..1w)
+   *   - Live tick via WebSocket price events
+   *   - Volume is UNKNOWN (0 in every candle ó no forex volume provided)
+   *   - Rate limit 8/min hit (429 observed)
+   * NOT VERIFIED:
+   *   - Historical coverage start date (never loaded from 2000)
+   *   - Per-day 800 limit (never hit)
+   *   - Commercial license terms (never read)
+   */
   private defaultTwelveData(): SourceCapability {
     return {
       source_id: 'twelvedata-ws',
@@ -211,15 +219,16 @@ export class SourceRegistry {
         ohlc: 'VERIFIED',
         tick: 'VERIFIED',
         orderbook: 'UNKNOWN',
-        volume: 'UNVERIFIED',
+        volume: 'UNKNOWN',
         news: 'UNKNOWN',
       },
       timestamp_semantics: 'event_time_utc',
       volume_semantics: 'UNKNOWN',
       historical_coverage: {
-        from: '2000-01-01',
-        to: 'now',
+        from: null,
+        to: null,
         status: 'UNVERIFIED',
+        verified_loaded_bars: 100,
       },
       rate_limits: {
         per_minute: 8,
@@ -229,12 +238,30 @@ export class SourceRegistry {
       license_and_retention: {
         commercial_use: 'UNVERIFIED',
         redistribution: 'UNVERIFIED',
-        notes: 'Free tier documented limits; commercial terms require confirmation',
+        notes: 'Free-tier documented limits; commercial terms not reviewed',
       },
       config_version: '1.0.0',
+      verification_notes: [
+        'OHLC loaded successfully (100+ bars per timeframe)',
+        'Live tick verified via WebSocket price events',
+        'Volume always 0 ó no forex volume from this source',
+        'Rate limit 8/min hit (429 observed on burst)',
+      ],
     };
   }
 
+  /**
+   * ß4 + ß2.9: Binance PAXG/USDT
+   * VERIFIED at runtime:
+   *   - OHLC loaded 100+ bars (1m)
+   *   - Live tick via WebSocket
+   *   - Volume is TICK (trade count, not physical gold volume)
+   * NOT VERIFIED:
+   *   - Orderbook (never consumed by FALK)
+   *   - 1200/min rate limit (never stress-tested)
+   *   - Historical start 2020 (only loaded recent 100 bars)
+   *   - License terms
+   */
   private defaultBinancePaxg(): SourceCapability {
     return {
       source_id: 'binance-paxg',
@@ -246,31 +273,89 @@ export class SourceRegistry {
       data_capabilities: {
         ohlc: 'VERIFIED',
         tick: 'VERIFIED',
-        orderbook: 'VERIFIED',
+        orderbook: 'UNVERIFIED',
         volume: 'VERIFIED',
         news: 'UNKNOWN',
       },
       timestamp_semantics: 'event_time_utc',
       volume_semantics: 'TICK',
       historical_coverage: {
-        from: '2020-09-01',
-        to: 'now',
-        status: 'VERIFIED',
+        from: null,
+        to: null,
+        status: 'UNVERIFIED',
+        verified_loaded_bars: 100,
       },
       rate_limits: {
         per_minute: 1200,
         per_day: 100000,
-        status: 'VERIFIED',
+        status: 'UNVERIFIED',
       },
       license_and_retention: {
         commercial_use: 'UNVERIFIED',
         redistribution: 'UNVERIFIED',
-        notes: 'Binance terms; PAXG = tick volume, not physical gold volume',
+        notes: 'Binance terms; PAXG volume is tick count, not physical gold volume',
       },
       config_version: '1.0.0',
+      verification_notes: [
+        'OHLC loaded successfully (100 bars)',
+        'Live tick verified via combined stream',
+        'Volume identified as TICK (trade count)',
+        'Orderbook capability exists but not consumed by FALK',
+      ],
     };
   }
 
+  /**
+   * ß4: xaus.com backup REST API
+   * Barely used ó most capabilities UNKNOWN
+   */
+  private defaultXausApi(): SourceCapability {
+    return {
+      source_id: 'xaus-api',
+      source_name: 'xaus.com REST API',
+      source_type: 'api',
+      connection_type: 'rest',
+      instrument_id: 'XAUUSD',
+      canonical_symbol: 'XAUUSD',
+      data_capabilities: {
+        ohlc: 'UNKNOWN',
+        tick: 'UNVERIFIED',
+        orderbook: 'UNKNOWN',
+        volume: 'UNKNOWN',
+        news: 'UNKNOWN',
+      },
+      timestamp_semantics: 'unknown',
+      volume_semantics: 'UNKNOWN',
+      historical_coverage: {
+        from: null,
+        to: null,
+        status: 'UNKNOWN',
+      },
+      rate_limits: {
+        per_minute: null,
+        per_day: null,
+        status: 'UNKNOWN',
+      },
+      license_and_retention: {
+        commercial_use: 'UNVERIFIED',
+        redistribution: 'UNVERIFIED',
+        notes: 'Free public API; terms not reviewed',
+      },
+      config_version: '1.0.0',
+      verification_notes: [
+        'Used only as failover backup',
+        'Not tested extensively',
+      ],
+    };
+  }
+
+  /**
+   * ß4: H3 aggregated from 3◊ 1h (derived, not external)
+   * VERIFIED at runtime:
+   *   - Aggregation works (33 H3 candles produced)
+   *   - Boundary-aligned to 3-hour marks
+   *   - Gap detection prevents incomplete H3
+   */
   private defaultH3Aggregated(): SourceCapability {
     return {
       source_id: 'h3-aggregated',
@@ -292,6 +377,7 @@ export class SourceRegistry {
         from: null,
         to: 'now',
         status: 'VERIFIED',
+        verified_loaded_bars: 33,
       },
       rate_limits: {
         per_minute: null,
@@ -304,42 +390,11 @@ export class SourceRegistry {
         notes: 'Derived from 1h candles - inherits TwelveData terms',
       },
       config_version: '1.0.0',
-    };
-  }
-
-  private defaultXausApi(): SourceCapability {
-    return {
-      source_id: 'xaus-api',
-      source_name: 'xaus.com REST API',
-      source_type: 'api',
-      connection_type: 'rest',
-      instrument_id: 'XAUUSD',
-      canonical_symbol: 'XAUUSD',
-      data_capabilities: {
-        ohlc: 'UNKNOWN',
-        tick: 'VERIFIED',
-        orderbook: 'UNKNOWN',
-        volume: 'UNKNOWN',
-        news: 'UNKNOWN',
-      },
-      timestamp_semantics: 'event_time_utc',
-      volume_semantics: 'UNKNOWN',
-      historical_coverage: {
-        from: null,
-        to: null,
-        status: 'UNKNOWN',
-      },
-      rate_limits: {
-        per_minute: null,
-        per_day: null,
-        status: 'UNKNOWN',
-      },
-      license_and_retention: {
-        commercial_use: 'UNVERIFIED',
-        redistribution: 'UNVERIFIED',
-        notes: 'Free public API; terms not reviewed',
-      },
-      config_version: '1.0.0',
+      verification_notes: [
+        'Aggregated 33 H3 candles from 99 1h candles at runtime',
+        'Boundary-aligned: 00:00, 03:00, ..., 21:00 UTC',
+        'Gap detection verified (incomplete H3 not emitted)',
+      ],
     };
   }
 }

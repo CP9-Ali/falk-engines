@@ -64,7 +64,7 @@ describe('SourceRegistry (§4)', () => {
   it('snapshot contains version + runtime', () => {
     const reg = new SourceRegistry();
     const snap = reg.snapshot() as any;
-    expect(snap.registry_version).toBe('1.0.0');
+    expect(snap.registry_version).toBe('1.1.0');
     expect(snap.sources.length).toBeGreaterThanOrEqual(3);
     expect(snap.sources[0].runtime).toBeDefined();
   });
