@@ -15,6 +15,7 @@ import { toCanonical, assessUsability, type LineageRef } from './normalization/c
 import { RawStore } from './storage/raw-store';
 import { SourceRegistry } from './ingestion/source-registry';
 import { aggregateCandles, compareTimeframes } from './multi-timeframe/aggregator';
+import { EventIntelligence } from './events/event-intelligence';
 import type { RawDataPoint } from './core/types';
 import type { Candle } from './data-quality/checks/base';
 import type { FeatureComputeResult } from './feature-engineering/types';
@@ -64,6 +65,9 @@ async function main() {
 
   const rawStore = new RawStore();
   const registry = new SourceRegistry();
+  const eventIntel = new EventIntelligence({ pollMs: 5 * 60_000, highImpactWindowMs: 30 * 60_000 });
+  eventIntel.refreshIfNeeded().catch(() => {});
+  setInterval(() => { eventIntel.refreshIfNeeded().catch(() => {}); }, 5 * 60_000);
   const audit = new HashChainAuditLog();
   const auth = new AuthorizationService(audit);
   const reg = new FeatureRegistry();
@@ -187,6 +191,10 @@ async function main() {
         }), 'live-runner');
         dashboard.broadcast({ type: 'worm', data: { id: snap.snapshotId, total: sink.count(), last: snap.snapshotId } });
       }
+
+      const evFeatures = eventIntel.computeFeatures({ asOfCutoff: cutoff, eventTimeUtc: point.eventTime });
+      dashboard.broadcast({ type: 'feature', timeframe: tfLabel, data: { name: 'news', value: evFeatures.is_high_impact_active ? 1 : 0 } });
+      const evLine = evFeatures.is_high_impact_active ? ' | NEWS=active' : (evFeatures.minutes_since_last_high !== null ? ' | last_high=' + evFeatures.minutes_since_last_high + 'm' : '');
 
       const logLine =
         '[' + tfLabel + '] C=' + point.value.close.toFixed(2) +

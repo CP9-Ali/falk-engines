@@ -3,6 +3,7 @@ import 'dotenv/config';
 import type { RawDataPoint } from '../core/types';
 import type { Candle } from '../data-quality/checks/base';
 import { RawStore, type RawRef } from '../storage/raw-store';
+import { CheckpointManager } from './checkpoint';
 
 interface Bar { start: number; open: number; high: number; low: number; close: number; }
 
@@ -41,6 +42,7 @@ export class TwelveDataWsSource {
   private currentBars = new Map<string, Bar>();
   private lastEmittedBarStart = new Map<string, number>();
   private readonly rawStore = new RawStore();
+  private readonly checkpoints = new CheckpointManager();
 
   constructor(
     private readonly apiKey: string,
@@ -128,6 +130,7 @@ export class TwelveDataWsSource {
       });
 
       this.onCandle(tf.label, p, true, { sourceSymbol: this.symbol, fetchMethod: 'history', lineage });
+      this.checkpoints.update('twelvedata-ws', tf.label, p.eventTime, lineage.payload_hash);
       count++;
     }
     console.log('[TD-WS] Loaded ' + count + ' ' + tf.label + ' bars');
@@ -219,6 +222,7 @@ export class TwelveDataWsSource {
     });
 
     this.onCandle(tf.label, p, false, { sourceSymbol: this.symbol, fetchMethod: 'live-tick', lineage });
+    this.checkpoints.update('twelvedata-ws', tf.label, p.eventTime, lineage.payload_hash);
   }
 
   private logErr(msg: string): void {

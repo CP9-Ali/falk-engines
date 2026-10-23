@@ -63,3 +63,6 @@ backups/
 .env
 .backup/
 *.env
+
+.env
+.backup/
