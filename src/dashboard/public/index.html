@@ -2,64 +2,72 @@
 <html lang="en" dir="ltr">
 <head>
 <meta charset="UTF-8">
-<title>FALK - XAUUSD Multi-Timeframe Dashboard</title>
+<title>FALK - XAUUSD Professional Dashboard</title>
+<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:'Segoe UI',Tahoma,sans-serif;background:#0a0e27;color:#e0e0e0;min-height:100vh}
-.header{background:linear-gradient(135deg,#1a1f3a,#0f1429);padding:20px 30px;border-bottom:2px solid #f5a623;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:20px}
-.symbol{font-size:26px;font-weight:bold;color:#f5a623;letter-spacing:1px}
-.subtitle{font-size:12px;color:#8892b0;margin-top:4px}
-.price{font-size:38px;font-weight:bold;font-variant-numeric:tabular-nums}
+.header{background:linear-gradient(135deg,#1a1f3a,#0f1429);padding:16px 24px;border-bottom:2px solid #f5a623;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
+.symbol{font-size:24px;font-weight:bold;color:#f5a623;letter-spacing:1px}
+.subtitle{font-size:11px;color:#8892b0;margin-top:2px}
+.price{font-size:34px;font-weight:bold;font-variant-numeric:tabular-nums}
 .price.pulse{animation:pulse 0.4s ease-out}
 @keyframes pulse{0%{text-shadow:0 0 20px rgba(245,166,35,0.9)}100%{text-shadow:none}}
 .up{color:#00e676}.down{color:#ff5252}.neutral{color:#f5a623}
-.change{font-size:14px;font-variant-numeric:tabular-nums}
-.status{display:flex;gap:20px;font-size:13px;color:#8892b0;align-items:center;flex-wrap:wrap}
-.dot{width:10px;height:10px;border-radius:50%;display:inline-block;margin-right:6px}
+.change{font-size:13px;font-variant-numeric:tabular-nums}
+.status{display:flex;gap:18px;font-size:12px;color:#8892b0;align-items:center;flex-wrap:wrap}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}
 .dot-on{background:#00e676;box-shadow:0 0 10px #00e676}
 .dot-off{background:#ff5252}
 .dot-live{background:#00e5ff;box-shadow:0 0 10px #00e5ff;animation:blink 1s infinite}
 @keyframes blink{0%,100%{opacity:1}50%{opacity:0.3}}
-.ticker-bar{background:#131829;padding:8px 30px;font-size:12px;color:#8892b0;border-bottom:1px solid #2a3050;display:flex;gap:30px;flex-wrap:wrap}
+.ticker-bar{background:#131829;padding:7px 24px;font-size:11px;color:#8892b0;border-bottom:1px solid #2a3050;display:flex;gap:24px;flex-wrap:wrap}
 .ticker-bar strong{color:#e0e0e0}
-.tf-tabs{display:flex;gap:0;background:#0f1429;border-bottom:1px solid #2a3050;padding:0 30px}
-.tf-tab{padding:12px 24px;font-size:14px;font-weight:bold;color:#8892b0;cursor:pointer;border-bottom:3px solid transparent;transition:all 0.2s;user-select:none}
+.tf-tabs{display:flex;background:#0f1429;border-bottom:1px solid #2a3050;padding:0 24px;overflow-x:auto}
+.tf-tab{padding:11px 20px;font-size:13px;font-weight:bold;color:#8892b0;cursor:pointer;border-bottom:3px solid transparent;transition:all 0.2s;user-select:none;white-space:nowrap}
 .tf-tab:hover{color:#e0e0e0;background:#131829}
 .tf-tab.active{color:#f5a623;border-bottom-color:#f5a623;background:#131829}
 .tf-tab .count{font-size:10px;color:#5a6490;margin-left:6px;font-weight:normal}
-.grid{display:grid;grid-template-columns:2fr 1fr;gap:20px;padding:20px;max-width:1600px;margin:0 auto}
-.card{background:#131829;border-radius:12px;padding:20px;border:1px solid #2a3050;margin-bottom:20px}
-.card h3{font-size:11px;text-transform:uppercase;color:#8892b0;margin-bottom:15px;letter-spacing:1.5px;font-weight:600}
-#chart{width:100%;height:340px;display:block}
-.features{display:grid;grid-template-columns:1fr;gap:12px}
-.feature{background:#0f1429;padding:16px 20px;border-radius:8px;border-left:4px solid #f5a623}
+.grid{display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:16px;max-width:1800px;margin:0 auto}
+.card{background:#131829;border-radius:10px;padding:16px;border:1px solid #2a3050;margin-bottom:16px}
+.card h3{font-size:11px;text-transform:uppercase;color:#8892b0;margin-bottom:10px;letter-spacing:1.2px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
+.chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px}
+.chart-header h3{margin:0}
+.ohlc-readout{font-size:11px;font-family:Consolas,monospace;color:#d0d5e8;font-variant-numeric:tabular-nums;background:#0a0e27;padding:4px 10px;border-radius:4px;min-height:20px}
+.ohlc-readout span{color:#8892b0}
+.chart-container{position:relative;width:100%}
+#chart-price{height:420px}
+#chart-rsi,#chart-atr{height:130px}
+.chart-tip{position:absolute;top:8px;left:8px;font-size:10px;color:#5a6490;pointer-events:none;z-index:2}
+.features{display:grid;grid-template-columns:1fr;gap:10px}
+.feature{background:#0f1429;padding:14px 18px;border-radius:8px;border-left:4px solid #f5a623;position:relative;overflow:hidden}
 .feature-label{font-size:10px;color:#8892b0;text-transform:uppercase;letter-spacing:1px}
-.feature-value{font-size:26px;font-weight:bold;margin-top:6px;font-variant-numeric:tabular-nums}
-.log{max-height:380px;overflow-y:auto;font-family:Consolas,monospace;font-size:11.5px;background:#0a0e27;padding:8px;border-radius:8px}
-.log-entry{padding:6px 8px;border-bottom:1px solid #1a1f3a;display:flex;gap:10px;align-items:flex-start}
-.log-time{color:#5a6490;min-width:65px;flex-shrink:0}
-.log-type{font-weight:bold;min-width:70px;flex-shrink:0;font-size:10px;padding-top:1px}
-.log-info{color:#d0d5e8;flex:1;word-break:break-word}
+.feature-value{font-size:24px;font-weight:bold;margin-top:4px;font-variant-numeric:tabular-nums}
+.feature-meta{font-size:10px;color:#5a6490;margin-top:2px}
+.log{max-height:340px;overflow-y:auto;font-family:Consolas,monospace;font-size:11px;background:#0a0e27;padding:6px;border-radius:6px}
+.log-entry{padding:5px 7px;border-bottom:1px solid #1a1f3a;display:flex;gap:8px;align-items:flex-start}
+.log-time{color:#5a6490;min-width:58px;flex-shrink:0;font-size:10px}
+.log-type{font-weight:bold;min-width:64px;flex-shrink:0;font-size:9px;padding-top:2px}
+.log-info{color:#d0d5e8;flex:1;word-break:break-word;font-size:10.5px}
 .t-CANDLE{color:#f5a623}.t-QUALITY{color:#00e5ff}.t-FUSION{color:#bd93f9}.t-FEATURE{color:#00e676}.t-TASK{color:#ff9f43}.t-WORM{color:#ff6b9d}.t-ERROR{color:#ff5252}.t-INFO{color:#8892b0}
-table{width:100%;border-collapse:collapse;font-size:12px}
-th{text-align:left;padding:8px 6px;color:#8892b0;font-size:10px;text-transform:uppercase;border-bottom:1px solid #2a3050}
-td{padding:8px 6px;border-bottom:1px solid #1a1f3a;font-family:Consolas,monospace;font-variant-numeric:tabular-nums}
-.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:bold;text-transform:uppercase}
-.b-BACKFILL{background:#5a6490;color:#fff}
-.b-SUCCESS{background:#00e676;color:#000}
-.b-INSUFFICIENT_DATA{background:#ffc107;color:#000}
-.b-FAILED,.b-FAIL{background:#ff5252;color:#fff}
-.src-xau{color:#f5a623;font-weight:bold}.src-paxg{color:#8892b0}
-.worm-num{font-size:44px;font-weight:bold;color:#ff6b9d;font-variant-numeric:tabular-nums}
-.worm-last{font-size:11px;color:#5a6490;margin-top:8px;font-family:Consolas,monospace;word-break:break-all}
-@media(max-width:900px){.grid{grid-template-columns:1fr}.tf-tabs{padding:0 10px}.tf-tab{padding:10px 14px;font-size:12px}}
+.worm-num{font-size:40px;font-weight:bold;color:#ff6b9d;font-variant-numeric:tabular-nums;line-height:1}
+.worm-last{font-size:10px;color:#5a6490;margin-top:6px;font-family:Consolas,monospace;word-break:break-all}
+.event-indicator{display:flex;align-items:center;gap:10px;padding:10px;background:#0f1429;border-radius:6px;font-size:12px}
+.event-indicator.active{border-left:4px solid #ff9f43;background:#2a1f0f}
+.event-indicator.quiet{border-left:4px solid #00e676}
+.event-indicator small{color:#8892b0;display:block;margin-top:2px}
+.source-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:9px;font-weight:bold;text-transform:uppercase;letter-spacing:0.5px}
+.src-XAU{background:#f5a623;color:#000}
+.src-PAXG{background:#5a6490;color:#fff}
+.src-H3{background:#bd93f9;color:#000}
+@media(max-width:1100px){.grid{grid-template-columns:1fr}#chart-price{height:320px}}
 </style>
 </head>
 <body>
 <div class="header">
   <div>
     <div class="symbol">XAUUSD - GOLD SPOT</div>
-    <div class="subtitle">FALK Live Pipeline - Multi-Timeframe</div>
+    <div class="subtitle">FALK Professional Dashboard - 8 Timeframes</div>
   </div>
   <div style="text-align:right">
     <div class="price neutral" id="price">--</div>
@@ -68,38 +76,62 @@ td{padding:8px 6px;border-bottom:1px solid #1a1f3a;font-family:Consolas,monospac
   <div class="status">
     <div><span class="dot dot-off" id="ws-dot"></span>WS</div>
     <div><span class="dot dot-live"></span>LIVE</div>
-    <div><strong id="total-candles">0</strong> candles total</div>
+    <div><strong id="total-candles">0</strong> candles</div>
   </div>
 </div>
+
 <div class="ticker-bar">
   <div>Last tick: <strong id="last-tick">--</strong></div>
   <div>Source: <strong id="tick-source">--</strong></div>
   <div>Ticks: <strong id="tick-count">0</strong></div>
   <div>Volume: <strong id="vol-semantics">--</strong></div>
   <div>Uptime: <strong id="uptime">0s</strong></div>
+  <div>Last update: <strong id="last-update">--</strong></div>
 </div>
+
 <div class="tf-tabs" id="tf-tabs"></div>
+
 <div class="grid">
   <div>
     <div class="card">
-      <h3 id="chart-title">XAUUSD - 1m Chart</h3>
-      <canvas id="chart"></canvas>
+      <div class="chart-header">
+        <h3>XAUUSD - <span id="active-tf-label">1m</span> <span style="color:#5a6490;font-size:10px;font-weight:normal;margin-left:6px">Candlestick + SMA(20) + Volume</span></h3>
+        <div class="ohlc-readout" id="ohlc-readout">--</div>
+      </div>
+      <div class="chart-container">
+        <div class="chart-tip">Volume</div>
+        <div id="chart-price"></div>
+      </div>
     </div>
     <div class="card">
-      <h3>Recent Candles</h3>
-      <table>
-        <thead><tr><th>Time</th><th>Source</th><th>Open</th><th>High</th><th>Low</th><th>Close</th><th>Status</th></tr></thead>
-        <tbody id="candles-table"></tbody>
-      </table>
+      <div class="chart-header">
+        <h3>RSI 14 <span style="color:#5a6490;font-size:10px;font-weight:normal">Overbought ≥70 / Oversold ≤30</span></h3>
+      </div>
+      <div id="chart-rsi" class="chart-container"></div>
+    </div>
+    <div class="card">
+      <div class="chart-header">
+        <h3>ATR 14 <span style="color:#5a6490;font-size:10px;font-weight:normal">Volatility</span></h3>
+      </div>
+      <div id="chart-atr" class="chart-container"></div>
     </div>
   </div>
   <div>
     <div class="card">
-      <h3 id="features-title">Features - 1m</h3>
+      <h3>Features</h3>
       <div class="features">
-        <div class="feature"><div class="feature-label">SMA 20</div><div class="feature-value" id="sma">N/A</div></div>
-        <div class="feature"><div class="feature-label">RSI 14</div><div class="feature-value" id="rsi">N/A</div></div>
-        <div class="feature"><div class="feature-label">ATR 14</div><div class="feature-value" id="atr">N/A</div></div>
+        <div class="feature"><div class="feature-label">SMA 20</div><div class="feature-value" id="feat-sma">N/A</div><div class="feature-meta">period=20</div></div>
+        <div class="feature"><div class="feature-label">RSI 14</div><div class="feature-value" id="feat-rsi">N/A</div><div class="feature-meta">period=14, range 0-100</div></div>
+        <div class="feature"><div class="feature-label">ATR 14</div><div class="feature-value" id="feat-atr">N/A</div><div class="feature-meta">period=14, units: price</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <h3>Event Intelligence</h3>
+      <div class="event-indicator quiet" id="event-indicator">
+        <div>
+          <div id="event-status">Market quiet</div>
+          <small id="event-detail">--</small>
+        </div>
       </div>
     </div>
     <div class="card">
@@ -108,36 +140,161 @@ td{padding:8px 6px;border-bottom:1px solid #1a1f3a;font-family:Consolas,monospac
       <div class="worm-last">Last: <span id="worm-last">--</span></div>
     </div>
     <div class="card">
-      <h3 id="log-title">Event Stream - 1m</h3>
+      <h3>Event Stream</h3>
       <div class="log" id="log"></div>
     </div>
   </div>
 </div>
+
 <script>
+if (typeof LightweightCharts === 'undefined') {
+  document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#ff5252;font-size:18px">Failed to load Lightweight Charts.<br><small>Please verify internet connection and reload.</small></div>';
+  throw new Error('LightweightCharts not loaded');
+}
+
 const TFS = ['1m', '5m', '15m', '1h', 'H3', '4h', '1d', '1w'];
+const TF_LABEL = { '1m':'1 Minute', '5m':'5 Minutes', '15m':'15 Minutes', '1h':'1 Hour', 'H3':'3 Hours', '4h':'4 Hours', '1d':'Daily', '1w':'Weekly' };
+
 const state = {
   activeTf: '1m',
-  candlesByTf: {},
-  featuresByTf: {},
-  eventsByTf: {},
+  candles: {},       // tf -> Map<time, candle>
+  features: {},      // tf -> Map<'sma'|'rsi'|'atr', Map<time, value>>
+  seenFeatures: {},  // tf -> Map<'sma'|'rsi'|'atr', Set<time>>
+  lastCandleTime: {},// tf -> unix seconds
+  lastPrice: null,
+  tickCount: 0,
+  startTime: Date.now(),
+  events: {},        // tf -> array of {time, type, info}
+  tickers: {},       // tf -> { totalCandles }
 };
 for (const tf of TFS) {
-  state.candlesByTf[tf] = new Map();
-  state.featuresByTf[tf] = { sma: null, rsi: null, atr: null };
-  state.eventsByTf[tf] = [];
+  state.candles[tf] = new Map();
+  state.features[tf] = { sma: new Map(), rsi: new Map(), atr: new Map() };
+  state.seenFeatures[tf] = { sma: new Set(), rsi: new Set(), atr: new Set() };
+  state.events[tf] = [];
+  state.tickers[tf] = { totalCandles: 0 };
+  state.lastCandleTime[tf] = 0;
 }
 
-const canvas = document.getElementById('chart'), ctx = canvas.getContext('2d');
-let lastPrice = null, tickCount = 0, startTime = Date.now();
+const charts = { price: null, rsi: null, atr: null };
+const series = { candles: null, sma: null, volume: null, rsi: null, atr: null };
+let syncing = false;
 
-function resize() {
-  canvas.width = canvas.offsetWidth * devicePixelRatio;
-  canvas.height = canvas.offsetHeight * devicePixelRatio;
-  ctx.setTransform(1,0,0,1,0,0);
-  ctx.scale(devicePixelRatio, devicePixelRatio);
+const chartOpts = {
+  layout: { background: { color: '#131829' }, textColor: '#8892b0', fontSize: 10 },
+  grid: { vertLines: { color: '#1a1f3a' }, horzLines: { color: '#1a1f3a' } },
+  timeScale: { borderColor: '#2a3050', timeVisible: true, secondsVisible: false, rightOffset: 3, barSpacing: 6 },
+  rightPriceScale: { borderColor: '#2a3050' },
+  crosshair: { mode: LightweightCharts.CrosshairMode.Normal, vertLine: { color: '#f5a623', width: 1, style: 2, labelBackgroundColor: '#f5a623' }, horzLine: { color: '#f5a623', width: 1, style: 2, labelBackgroundColor: '#f5a623' } },
+  handleScroll: { mouseWheel: true, pressedMouseMove: true },
+  handleScale: { mouseWheel: true, pinch: true },
+};
+
+function initCharts() {
+  // Price chart
+  charts.price = LightweightCharts.createChart(document.getElementById('chart-price'), chartOpts);
+  series.candles = charts.price.addCandlestickSeries({
+    upColor: '#00e676', downColor: '#ff5252', borderUpColor: '#00e676', borderDownColor: '#ff5252',
+    wickUpColor: '#00e676', wickDownColor: '#ff5252', priceLineVisible: true, priceLineColor: '#f5a623',
+  });
+  series.sma = charts.price.addLineSeries({
+    color: '#f5a623', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false,
+  });
+  series.volume = charts.price.addHistogramSeries({
+    priceFormat: { type: 'volume' }, priceScaleId: 'volume', color: '#5a6490',
+  });
+  charts.price.priceScale('volume').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
+  charts.price.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.2 } });
+
+  // RSI chart
+  charts.rsi = LightweightCharts.createChart(document.getElementById('chart-rsi'), { ...chartOpts, rightPriceScale: { ...chartOpts.rightPriceScale, scaleMargins: { top: 0.1, bottom: 0.1 } } });
+  series.rsi = charts.rsi.addLineSeries({ color: '#00e5ff', lineWidth: 2, priceLineVisible: false, lastValueVisible: true });
+  series.rsi.createPriceLine({ price: 70, color: '#ff5252', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'OB' });
+  series.rsi.createPriceLine({ price: 30, color: '#00e676', lineWidth: 1, lineStyle: 2, axisLabelVisible: true, title: 'OS' });
+
+  // ATR chart
+  charts.atr = LightweightCharts.createChart(document.getElementById('chart-atr'), { ...chartOpts, rightPriceScale: { ...chartOpts.rightPriceScale, scaleMargins: { top: 0.1, bottom: 0.1 } } });
+  series.atr = charts.atr.addLineSeries({ color: '#bd93f9', lineWidth: 2, priceLineVisible: false, lastValueVisible: true });
+
+  // Sync time scales
+  const allCharts = [charts.price, charts.rsi, charts.atr];
+  allCharts.forEach(src => {
+    src.timeScale().subscribeVisibleLogicalRangeChange(range => {
+      if (syncing || !range) return;
+      syncing = true;
+      allCharts.forEach(c => { if (c !== src) c.timeScale().setVisibleLogicalRange(range); });
+      syncing = false;
+    });
+  });
+
+  // OHLC readout on crosshair
+  charts.price.subscribeCrosshairMove(param => {
+    const el = document.getElementById('ohlc-readout');
+    if (!param.time || !param.point || param.point.x < 0 || param.point.y < 0) {
+      el.textContent = '--';
+      return;
+    }
+    const c = param.seriesData.get(series.candles);
+    if (c) {
+      const dir = c.close >= c.open ? '#00e676' : '#ff5252';
+      el.innerHTML =
+        '<span>O:</span> <b style="color:' + dir + '">' + c.open.toFixed(2) + '</b> ' +
+        '<span>H:</span> <b style="color:#00e676">' + c.high.toFixed(2) + '</b> ' +
+        '<span>L:</span> <b style="color:#ff5252">' + c.low.toFixed(2) + '</b> ' +
+        '<span>C:</span> <b style="color:' + dir + '">' + c.close.toFixed(2) + '</b> ' +
+        '<span>Δ:</span> <b>' + (((c.close - c.open) / c.open) * 100).toFixed(3) + '%</b>';
+    } else {
+      el.textContent = '--';
+    }
+  });
+
+  // Responsive
+  const resize = () => {
+    charts.price.applyOptions({ width: document.getElementById('chart-price').offsetWidth });
+    charts.rsi.applyOptions({ width: document.getElementById('chart-rsi').offsetWidth });
+    charts.atr.applyOptions({ width: document.getElementById('chart-atr').offsetWidth });
+  };
+  window.addEventListener('resize', resize);
+  setTimeout(resize, 50);
 }
-resize();
-window.addEventListener('resize', () => { resize(); draw(); });
+
+function toSec(iso) { return Math.floor(new Date(iso).getTime() / 1000); }
+
+function renderActiveTf() {
+  const tf = state.activeTf;
+  const candles = Array.from(state.candles[tf].values()).sort((a, b) => a.time - b.time);
+  const smaArr = Array.from(state.features[tf].sma.entries()).sort((a, b) => a[0] - b[0]).map(([t, v]) => ({ time: t, value: v }));
+  const rsiArr = Array.from(state.features[tf].rsi.entries()).sort((a, b) => a[0] - b[0]).map(([t, v]) => ({ time: t, value: v }));
+  const atrArr = Array.from(state.features[tf].atr.entries()).sort((a, b) => a[0] - b[0]).map(([t, v]) => ({ time: t, value: v }));
+
+  series.candles.setData(candles);
+  series.sma.setData(smaArr);
+  const volData = candles.map(c => ({ time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(0,230,118,0.5)' : 'rgba(255,82,82,0.5)' }));
+  series.volume.setData(volData);
+  series.rsi.setData(rsiArr);
+  series.atr.setData(atrArr);
+
+  // Update UI
+  document.getElementById('active-tf-label').textContent = TF_LABEL[tf] || tf;
+  document.getElementById('total-candles').textContent = candles.length;
+  // Update active feature display
+  const lastSma = smaArr[smaArr.length - 1]?.value;
+  const lastRsi = rsiArr[rsiArr.length - 1]?.value;
+  const lastAtr = atrArr[atrArr.length - 1]?.value;
+  document.getElementById('feat-sma').textContent = lastSma !== undefined ? lastSma.toFixed(2) : 'N/A';
+  document.getElementById('feat-rsi').textContent = lastRsi !== undefined ? lastRsi.toFixed(2) : 'N/A';
+  document.getElementById('feat-atr').textContent = lastAtr !== undefined ? lastAtr.toFixed(2) : 'N/A';
+}
+
+function switchTf(tf) {
+  state.activeTf = tf;
+  document.querySelectorAll('.tf-tab').forEach(t => t.classList.toggle('active', t.dataset.tf === tf));
+  renderActiveTf();
+  renderLog();
+  charts.price.timeScale().fitContent();
+  charts.rsi.timeScale().fitContent();
+  charts.atr.timeScale().fitContent();
+}
 
 function buildTabs() {
   const el = document.getElementById('tf-tabs');
@@ -152,204 +309,185 @@ function buildTabs() {
   }
 }
 
-function switchTf(tf) {
-  state.activeTf = tf;
-  document.querySelectorAll('.tf-tab').forEach(t => t.classList.toggle('active', t.dataset.tf === tf));
-  document.getElementById('chart-title').textContent = 'XAUUSD - ' + tf + ' Chart';
-  document.getElementById('features-title').textContent = 'Features - ' + tf;
-  document.getElementById('log-title').textContent = 'Event Stream - ' + tf;
-  const f = state.featuresByTf[tf];
-  document.getElementById('sma').textContent = f.sma === null ? 'N/A' : Number(f.sma).toFixed(2);
-  document.getElementById('rsi').textContent = f.rsi === null ? 'N/A' : Number(f.rsi).toFixed(2);
-  document.getElementById('atr').textContent = f.atr === null ? 'N/A' : Number(f.atr).toFixed(2);
-  draw();
-  renderTable();
-  renderLog();
-  updateTabCounts();
+function updateTabCounts() {
+  for (const tf of TFS) {
+    const el = document.getElementById('tab-count-' + tf);
+    if (el) el.textContent = state.candles[tf].size;
+  }
 }
 
-function getCandles(tf) {
-  const map = state.candlesByTf[tf];
-  const all = Array.from(map.values());
-  all.sort((a, b) => new Date(a.data.eventTime).getTime() - new Date(b.data.eventTime).getTime());
-  // Prefer XAU when both XAU and PAXG exist at same time
-  const byTime = new Map();
-  for (const c of all) {
-    const t = c.data.eventTime;
-    const ex = byTime.get(t);
-    if (!ex) { byTime.set(t, c); continue; }
-    if (c.data.symbol === 'XAU' && ex.data.symbol !== 'XAU') byTime.set(t, c);
-    else if (c.data.symbol !== 'XAU' && ex.data.symbol === 'XAU') { /* keep */ }
-    else byTime.set(t, c);
-  }
-  return Array.from(byTime.values()).sort((a, b) => new Date(a.data.eventTime).getTime() - new Date(b.data.eventTime).getTime());
-}
-
-function draw() {
-  const w = canvas.offsetWidth, h = canvas.offsetHeight;
-  ctx.clearRect(0, 0, w, h);
-  const cs = getCandles(state.activeTf);
-  if (cs.length < 2) {
-    ctx.fillStyle = '#5a6490'; ctx.font = '14px Segoe UI'; ctx.textAlign = 'center';
-    ctx.fillText('Waiting for ' + state.activeTf + ' candles...', w/2, h/2);
-    return;
-  }
-  const closes = cs.map(c => c.data.value.close);
-  const min = Math.min(...closes), max = Math.max(...closes), range = max - min || 1;
-  const pad = 50, cw = w - pad*2, ch = h - pad*2;
-  ctx.strokeStyle = '#1a1f3a'; ctx.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) {
-    const y = pad + (ch/4)*i;
-    ctx.beginPath(); ctx.moveTo(pad, y); ctx.lineTo(w-pad, y); ctx.stroke();
-    ctx.fillStyle = '#5a6490'; ctx.font = '10px Consolas'; ctx.textAlign = 'left';
-    ctx.fillText((max - (range/4)*i).toFixed(2), 5, y+4);
-  }
-  const step = cw / (closes.length - 1);
-  const grad = ctx.createLinearGradient(0, pad, 0, pad+ch);
-  grad.addColorStop(0, 'rgba(245,166,35,0.3)'); grad.addColorStop(1, 'rgba(245,166,35,0)');
-  ctx.beginPath();
-  closes.forEach((c, i) => {
-    const x = pad + i*step, y = pad + ch - ((c-min)/range)*ch;
-    i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
-  });
-  ctx.strokeStyle = '#f5a623'; ctx.lineWidth = 2; ctx.stroke();
-  ctx.lineTo(pad+cw, pad+ch); ctx.lineTo(pad, pad+ch); ctx.closePath();
-  ctx.fillStyle = grad; ctx.fill();
-  const lx = pad + (closes.length-1)*step;
-  const ly = pad + ch - ((closes[closes.length-1]-min)/range)*ch;
-  ctx.beginPath(); ctx.arc(lx, ly, 4, 0, Math.PI*2); ctx.fillStyle = '#f5a623'; ctx.fill();
-}
-
-function renderTable() {
-  const cs = getCandles(state.activeTf);
-  const recent = cs.slice(-20).reverse();
-  const tb = document.getElementById('candles-table');
-  tb.innerHTML = '';
-  for (const c of recent) {
-    const r = document.createElement('tr');
-    const t = new Date(c.data.eventTime).toLocaleTimeString('en-GB', {hour12:false});
-    const status = c.status || 'SUCCESS';
-    const cls = 'b-' + (status === 'BACKFILL' ? 'BACKFILL' : status === 'SUCCESS' ? 'SUCCESS' : 'INSUFFICIENT_DATA');
-    const srcCls = c.data.symbol === 'XAU' ? 'src-xau' : 'src-paxg';
-    r.innerHTML = '<td>'+t+'</td><td class="'+srcCls+'">'+c.data.symbol+'</td>'
-      + '<td>'+c.data.value.open.toFixed(2)+'</td>'
-      + '<td>'+c.data.value.high.toFixed(2)+'</td>'
-      + '<td>'+c.data.value.low.toFixed(2)+'</td>'
-      + '<td>'+c.data.value.close.toFixed(2)+'</td>'
-      + '<td><span class="badge '+cls+'">'+status+'</span></td>';
-    tb.appendChild(r);
-  }
+function addLog(tf, type, info) {
+  const t = new Date().toLocaleTimeString('en-GB', { hour12: false });
+  const arr = state.events[tf] || [];
+  arr.unshift({ time: t, type, info });
+  if (arr.length > 80) arr.pop();
+  state.events[tf] = arr;
+  if (tf === state.activeTf) renderLog();
 }
 
 function renderLog() {
   const log = document.getElementById('log');
   log.innerHTML = '';
-  const evs = state.eventsByTf[state.activeTf] || [];
+  const evs = state.events[state.activeTf] || [];
   for (const e of evs.slice(0, 60)) {
     const div = document.createElement('div');
     div.className = 'log-entry';
-    div.innerHTML = '<span class="log-time">'+e.time+'</span><span class="log-type t-'+e.type+'">'+e.type+'</span><span class="log-info">'+e.info+'</span>';
+    div.innerHTML = '<span class="log-time">' + e.time + '</span><span class="log-type t-' + e.type + '">' + e.type + '</span><span class="log-info">' + e.info + '</span>';
     log.appendChild(div);
   }
 }
 
-function addLog(tf, type, info) {
-  const t = new Date().toLocaleTimeString('en-GB', {hour12:false});
-  const arr = state.eventsByTf[tf] || [];
-  arr.unshift({time: t, type, info});
-  if (arr.length > 100) arr.pop();
-  state.eventsByTf[tf] = arr;
-  if (tf === state.activeTf) renderLog();
-}
-
-function updateTabCounts() {
-  for (const tf of TFS) {
-    const el = document.getElementById('tab-count-' + tf);
-    if (el) el.textContent = '(' + state.candlesByTf[tf].size + ')';
-  }
-  let total = 0;
-  for (const tf of TFS) total += state.candlesByTf[tf].size;
-  document.getElementById('total-candles').textContent = total;
-}
-
 function updateUptime() {
-  const s = Math.floor((Date.now()-startTime)/1000);
-  document.getElementById('uptime').textContent = s < 60 ? s+'s' : Math.floor(s/60)+'m '+(s%60)+'s';
+  const s = Math.floor((Date.now() - state.startTime) / 1000);
+  document.getElementById('uptime').textContent = s < 60 ? s + 's' : Math.floor(s / 60) + 'm ' + (s % 60) + 's';
 }
 setInterval(updateUptime, 1000);
 
-buildTabs();
-updateTabCounts();
+function updateEventIndicator() {
+  const el = document.getElementById('event-indicator');
+  const status = document.getElementById('event-status');
+  const detail = document.getElementById('event-detail');
+  const ind = el;
+  // Read from last known values
+  const lastSma = state.features[state.activeTf].sma;
+  const lastRsi = state.features[state.activeTf].rsi;
+  if (lastSma.size > 0) {
+    ind.className = 'event-indicator quiet';
+    status.textContent = 'Features active';
+    detail.textContent = 'SMA/RSI/ATR computing per candle';
+  } else {
+    ind.className = 'event-indicator quiet';
+    status.textContent = 'Awaiting features';
+    detail.textContent = 'Waiting for first candle to close';
+  }
+}
 
-const ws = new WebSocket('ws://' + location.host);
-ws.onopen = () => { document.getElementById('ws-dot').className = 'dot dot-on'; addLog(state.activeTf, 'INFO', 'Dashboard connected'); };
-ws.onclose = () => { document.getElementById('ws-dot').className = 'dot dot-off'; addLog(state.activeTf, 'ERROR', 'Disconnected'); };
-ws.onmessage = (e) => {
-  const m = JSON.parse(e.data);
+// WebSocket
+let ws = null;
+function connect() {
+  ws = new WebSocket('ws://' + location.host);
+  ws.onopen = () => {
+    document.getElementById('ws-dot').className = 'dot dot-on';
+    addLog(state.activeTf, 'INFO', 'Dashboard connected');
+  };
+  ws.onclose = () => {
+    document.getElementById('ws-dot').className = 'dot dot-off';
+    addLog(state.activeTf, 'ERROR', 'Disconnected - reconnecting in 3s');
+    setTimeout(connect, 3000);
+  };
+  ws.onerror = () => { document.getElementById('ws-dot').className = 'dot dot-off'; };
+  ws.onmessage = handleMessage;
+}
+
+function handleMessage(e) {
+  let m;
+  try { m = JSON.parse(e.data); } catch { return; }
   const tf = m.timeframe || '1m';
 
   if (m.type === 'tick') {
     if (m.data.source === 'XAU') window._lastXauTick = Date.now();
     else if (window._lastXauTick && Date.now() - window._lastXauTick < 30000) return;
 
-    tickCount++;
-    document.getElementById('tick-count').textContent = tickCount;
+    state.tickCount++;
+    document.getElementById('tick-count').textContent = state.tickCount;
     document.getElementById('tick-source').textContent = m.data.source;
-    document.getElementById('last-tick').textContent = new Date(m.data.ts).toLocaleTimeString('en-GB', {hour12:false});
+    document.getElementById('last-tick').textContent = new Date(m.data.ts).toLocaleTimeString('en-GB', { hour12: false });
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString('en-GB', { hour12: false });
     const p = document.getElementById('price');
     p.textContent = '$' + m.data.price.toFixed(2);
-    p.classList.add('pulse'); setTimeout(() => p.classList.remove('pulse'), 400);
-    if (lastPrice !== null) {
-      const d = m.data.price - lastPrice;
-      const pct = (d/lastPrice)*100;
+    p.classList.add('pulse');
+    setTimeout(() => p.classList.remove('pulse'), 400);
+    if (state.lastPrice !== null) {
+      const d = m.data.price - state.lastPrice;
+      const pct = (d / state.lastPrice) * 100;
       const ch = document.getElementById('change');
-      ch.textContent = (d>=0?'+':'') + d.toFixed(2) + ' (' + pct.toFixed(2) + '%)';
-      ch.className = 'change ' + (d>=0?'up':'down');
+      ch.textContent = (d >= 0 ? '+' : '') + d.toFixed(2) + ' (' + pct.toFixed(2) + '%)';
+      ch.className = 'change ' + (d >= 0 ? 'up' : 'down');
+      p.className = 'price pulse ' + (d >= 0 ? 'up' : 'down');
     }
-    lastPrice = m.data.price;
+    state.lastPrice = m.data.price;
     return;
   }
 
   if (m.type === 'candle') {
-    const fp = (m.data.fingerprint || (m.data.symbol + '-' + m.data.eventTime));
-    if (!state.candlesByTf[tf].has(fp)) {
-      state.candlesByTf[tf].set(fp, m);
-      if (state.candlesByTf[tf].size > 200) {
-        const firstKey = state.candlesByTf[tf].keys().next().value;
-        if (firstKey) state.candlesByTf[tf].delete(firstKey);
+    const raw = m.data;
+    if (!raw || !raw.value) return;
+    const t = toSec(raw.eventTime);
+    const c = { time: t, open: raw.value.open, high: raw.value.high, low: raw.value.low, close: raw.value.close, volume: raw.value.volume || 0 };
+    const wasNew = !state.candles[tf].has(t);
+    state.candles[tf].set(t, c);
+    state.lastCandleTime[tf] = t;
+    state.tickers[tf].totalCandles = state.candles[tf].size;
+
+    if (tf === state.activeTf) {
+      series.candles.update(c);
+      series.volume.update({ time: t, value: c.volume, color: c.close >= c.open ? 'rgba(0,230,118,0.5)' : 'rgba(255,82,82,0.5)' });
+      document.getElementById('total-candles').textContent = state.candles[tf].size;
+      if (m.status !== 'BACKFILL') {
+        addLog(tf, 'CANDLE', raw.symbol + ' C=' + c.close.toFixed(2) + ' [' + (m.status || 'SUCCESS') + ']');
       }
     }
-    if (tf === state.activeTf) {
-      if (m.data.symbol === 'XAU') document.getElementById('price').textContent = '$' + m.data.value.close.toFixed(2);
-      if (m.status !== 'BACKFILL') addLog(tf, 'CANDLE', m.data.symbol + ' C=' + m.data.value.close.toFixed(2));
-      draw();
-      renderTable();
+
+    if (wasNew && m.status !== 'BACKFILL') {
+      const src = raw.symbol === 'XAU' ? 'XAU' : (raw.symbol === 'PAXG' ? 'PAXG' : 'H3');
+      if (tf === 'H3') addLog(tf, 'CANDLE', 'H3 aggregated C=' + c.close.toFixed(2));
     }
     updateTabCounts();
     return;
   }
 
   if (m.type === 'feature') {
-    state.featuresByTf[tf][m.data.name] = m.data.value;
-    if (tf === state.activeTf) {
-      const el = document.getElementById(m.data.name);
-      if (el) el.textContent = m.data.value === null ? 'N/A' : Number(m.data.value).toFixed(2);
+    const name = m.data.name;
+    if (name === 'sma' || name === 'rsi' || name === 'atr') {
+      const t = state.lastCandleTime[tf];
+      if (!t || m.data.value === null || m.data.value === undefined) return;
+      if (state.seenFeatures[tf][name].has(t)) return;
+      state.seenFeatures[tf][name].add(t);
+      state.features[tf][name].set(t, m.data.value);
+
+      if (tf === state.activeTf) {
+        const s = name === 'sma' ? series.sma : (name === 'rsi' ? series.rsi : series.atr);
+        s.update({ time: t, value: m.data.value });
+        const el = document.getElementById('feat-' + name);
+        if (el) el.textContent = Number(m.data.value).toFixed(2);
+      }
     }
     return;
   }
 
   if (m.type === 'quality') {
-    addLog(tf, 'QUALITY', 'status=' + m.data.status);
     if (m.data.volume_semantics) document.getElementById('vol-semantics').textContent = m.data.volume_semantics;
+    return;
   }
-  if (m.type === 'fusion') addLog(tf, 'FUSION', 'value=' + m.data.value + ' conflict=' + m.data.conflict);
-  if (m.type === 'task' && m.data.state !== 'COMPLETED') addLog(tf, 'TASK', m.data.state);
+
+  if (m.type === 'fusion') {
+    addLog(tf, 'FUSION', 'value=' + m.data.value + ' conflict=' + m.data.conflict);
+    return;
+  }
+
+  if (m.type === 'task' && m.data.state !== 'COMPLETED') {
+    addLog(tf, 'TASK', m.data.state);
+    return;
+  }
+
   if (m.type === 'worm') {
     document.getElementById('worm-count').textContent = m.data.total;
     document.getElementById('worm-last').textContent = m.data.id;
+    return;
   }
-  if (m.type === 'error') addLog(tf, 'ERROR', m.data.message);
-};
+
+  if (m.type === 'error') {
+    addLog(tf, 'ERROR', m.data.message);
+    return;
+  }
+}
+
+// Init
+initCharts();
+buildTabs();
+updateEventIndicator();
+setTimeout(updateEventIndicator, 5000);
+connect();
 addLog('1m', 'INFO', 'Waiting for data...');
 </script>
 </body>
