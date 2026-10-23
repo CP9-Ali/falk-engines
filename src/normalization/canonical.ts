@@ -1,4 +1,4 @@
-﻿import type { RawDataPoint } from '../core/types';
+import type { RawDataPoint } from '../core/types';
 import type { Candle } from '../data-quality/checks/base';
 
 export type VolumeSemantics = 'TICK' | 'REAL' | 'CONTRACT' | 'UNKNOWN';
@@ -6,6 +6,7 @@ export type CanonicalTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w'
 
 export interface CanonicalCandle {
   readonly source_id: string;
+  readonly source_symbol: string;
   readonly canonical_symbol: 'XAUUSD';
   readonly timeframe: CanonicalTimeframe;
   readonly event_time_utc: string;
@@ -20,7 +21,10 @@ export interface CanonicalCandle {
   readonly volume_value: number;
   readonly volume_semantics: VolumeSemantics;
   readonly raw_fingerprint: string;
+  readonly lineage_id: string;
+  readonly raw_payload_ref: string;
   readonly normalization_version: string;
+  readonly processing_version: string;
 }
 
 export const VOLUME_SEMANTICS_BY_SOURCE: Record<string, VolumeSemantics> = {
@@ -30,16 +34,31 @@ export const VOLUME_SEMANTICS_BY_SOURCE: Record<string, VolumeSemantics> = {
   'xaus-api': 'UNKNOWN',
 };
 
+export const SOURCE_SYMBOL_BY_SOURCE: Record<string, string> = {
+  'twelvedata-ws': 'XAU/USD',
+  'binance-paxg': 'PAXGUSDT',
+  'fcsapi-xau': 'FX:XAUUSD',
+  'xaus-api': 'XAUUSD',
+};
+
+export interface LineageRef {
+  readonly lineage_id: string;
+  readonly raw_path: string;
+}
+
 export function toCanonical(
   raw: RawDataPoint<Candle>,
   timeframe: CanonicalTimeframe,
+  lineage: LineageRef,
 ): CanonicalCandle {
   const volume_semantics = VOLUME_SEMANTICS_BY_SOURCE[raw.sourceId] ?? 'UNKNOWN';
+  const source_symbol = SOURCE_SYMBOL_BY_SOURCE[raw.sourceId] ?? 'UNKNOWN';
   const rawVolume = raw.value.volume;
   const volume_value = volume_semantics === 'UNKNOWN' ? 0 : rawVolume;
 
   return {
     source_id: raw.sourceId,
+    source_symbol,
     canonical_symbol: 'XAUUSD',
     timeframe,
     event_time_utc: raw.eventTime,
@@ -54,7 +73,10 @@ export function toCanonical(
     volume_value,
     volume_semantics,
     raw_fingerprint: raw.fingerprint,
+    lineage_id: lineage.lineage_id,
+    raw_payload_ref: lineage.raw_path,
     normalization_version: '1.0.0',
+    processing_version: 'falk-1.0.0',
   };
 }
 

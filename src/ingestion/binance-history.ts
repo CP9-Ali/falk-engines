@@ -2,7 +2,15 @@ import 'dotenv/config';
 import type { RawDataPoint } from '../core/types';
 import type { Candle } from '../data-quality/checks/base';
 
-export async function loadBinanceHistory(symbol = 'PAXGUSDT', limit = 100): Promise<RawDataPoint<Candle>[]> {
+export interface BinanceHistoryRecord {
+  readonly point: RawDataPoint<Candle>;
+  readonly rawRow: ReadonlyArray<unknown>;
+}
+
+export async function loadBinanceHistory(
+  symbol = 'PAXGUSDT',
+  limit = 100,
+): Promise<BinanceHistoryRecord[]> {
   const url = 'https://api.binance.com/api/v3/klines?symbol=' + encodeURIComponent(symbol) +
     '&interval=1m&limit=' + limit;
   const res = await fetch(url);
@@ -11,7 +19,7 @@ export async function loadBinanceHistory(symbol = 'PAXGUSDT', limit = 100): Prom
   if (!Array.isArray(rows)) throw new Error('Binance history: invalid response');
 
   const now = Date.now();
-  const points: RawDataPoint<Candle>[] = [];
+  const records: BinanceHistoryRecord[] = [];
 
   for (const r of rows) {
     const openTime = Number(r[0]);
@@ -26,17 +34,20 @@ export async function loadBinanceHistory(symbol = 'PAXGUSDT', limit = 100): Prom
     const v = parseFloat(r[5]);
     if (!Number.isFinite(o) || !Number.isFinite(c)) continue;
 
-    points.push({
-      sourceId: 'binance-paxg',
-      value: { open: o, high: h, low: l, close: c, volume: v },
-      eventTime: new Date(openTime).toISOString(),
-      closedAt: new Date(closeTime).toISOString(),
-      arrivalTime: new Date().toISOString(),
-      availabilityTime: new Date(closeTime).toISOString(),
-      version: 1,
-      fingerprint: symbol + '-' + openTime,
+    records.push({
+      point: {
+        sourceId: 'binance-paxg',
+        value: { open: o, high: h, low: l, close: c, volume: v },
+        eventTime: new Date(openTime).toISOString(),
+        closedAt: new Date(closeTime).toISOString(),
+        arrivalTime: new Date().toISOString(),
+        availabilityTime: new Date(closeTime).toISOString(),
+        version: 1,
+        fingerprint: symbol + '-' + openTime,
+      },
+      rawRow: r,
     });
   }
 
-  return points;
+  return records;
 }

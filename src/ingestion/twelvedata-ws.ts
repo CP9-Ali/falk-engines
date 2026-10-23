@@ -2,6 +2,7 @@ import WebSocket from 'ws';
 import 'dotenv/config';
 import type { RawDataPoint } from '../core/types';
 import type { Candle } from '../data-quality/checks/base';
+import { RawStore, type RawRef } from '../storage/raw-store';
 
 interface Bar { start: number; open: number; high: number; low: number; close: number; }
 
@@ -10,10 +11,8 @@ export interface Timeframe {
   ms: number;
   twelveDataInterval: string;
   historySize: number;
-  hidden?: boolean;
 }
 
-// 5 أطر مباشرة + 1h مخفي (يُستخدم لبناء H3)
 export const TIMEFRAMES: Timeframe[] = [
   { label: '1m',  ms: 60_000,        twelveDataInterval: '1min',   historySize: 100 },
   { label: '5m',  ms: 300_000,       twelveDataInterval: '5min',   historySize: 100 },
@@ -24,7 +23,13 @@ export const TIMEFRAMES: Timeframe[] = [
   { label: '1w',  ms: 604_800_000,   twelveDataInterval: '1week',  historySize: 30  },
 ];
 
-export type CandleHandler = (tfLabel: string, point: RawDataPoint<Candle>, isHistory: boolean) => void;
+export interface RawInfo {
+  readonly sourceSymbol: string;
+  readonly fetchMethod: 'history' | 'live-tick' | 'live-kline';
+  readonly lineage: RawRef;
+}
+
+export type CandleHandler = (tfLabel: string, point: RawDataPoint<Candle>, isHistory: boolean, rawInfo: RawInfo) => void;
 
 export class TwelveDataWsSource {
   readonly name = 'twelvedata-ws';
@@ -35,6 +40,7 @@ export class TwelveDataWsSource {
   private heartbeatTimer: NodeJS.Timeout | null = null;
   private currentBars = new Map<string, Bar>();
   private lastEmittedBarStart = new Map<string, number>();
+  private readonly rawStore = new RawStore();
 
   constructor(
     private readonly apiKey: string,
@@ -110,7 +116,18 @@ export class TwelveDataWsSource {
         version: 1,
         fingerprint: 'tdws-' + tf.label + '-' + barStart,
       };
-      this.onCandle(tf.label, p, true);
+
+      const lineage = this.rawStore.save({
+        source_id: 'twelvedata-ws',
+        source_symbol: this.symbol,
+        timeframe: tf.label,
+        event_time_utc: p.eventTime,
+        fetch_method: 'history',
+        fetched_at_utc: new Date().toISOString(),
+        payload: v,
+      });
+
+      this.onCandle(tf.label, p, true, { sourceSymbol: this.symbol, fetchMethod: 'history', lineage });
       count++;
     }
     console.log('[TD-WS] Loaded ' + count + ' ' + tf.label + ' bars');
@@ -186,7 +203,22 @@ export class TwelveDataWsSource {
       version: 1,
       fingerprint: 'tdws-' + tf.label + '-' + bar.start,
     };
-    this.onCandle(tf.label, p, false);
+
+    const lineage = this.rawStore.save({
+      source_id: 'twelvedata-ws',
+      source_symbol: this.symbol,
+      timeframe: tf.label,
+      event_time_utc: p.eventTime,
+      fetch_method: 'live-tick',
+      fetched_at_utc: new Date().toISOString(),
+      payload: {
+        kind: 'aggregated-from-ticks',
+        bar: { start: bar.start, open: bar.open, high: bar.high, low: bar.low, close: bar.close },
+        generated_at: new Date().toISOString(),
+      },
+    });
+
+    this.onCandle(tf.label, p, false, { sourceSymbol: this.symbol, fetchMethod: 'live-tick', lineage });
   }
 
   private logErr(msg: string): void {

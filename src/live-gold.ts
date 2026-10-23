@@ -9,9 +9,10 @@ import { HashChainAuditLog } from './audit/audit-log';
 import { AuthorizationService } from './security/permissions';
 import { LocalFileOffsite, BackupManager } from './backup/backup-manager';
 import { DashboardServer } from './dashboard/server';
-import { TwelveDataWsSource, TIMEFRAMES } from './ingestion/twelvedata-ws';
+import { TwelveDataWsSource, TIMEFRAMES, type RawInfo } from './ingestion/twelvedata-ws';
 import { loadBinanceHistory } from './ingestion/binance-history';
-import { toCanonical, assessUsability } from './normalization/canonical';
+import { toCanonical, assessUsability, type LineageRef } from './normalization/canonical';
+import { RawStore } from './storage/raw-store';
 import type { RawDataPoint } from './core/types';
 import type { Candle } from './data-quality/checks/base';
 import type { FeatureComputeResult } from './feature-engineering/types';
@@ -40,17 +41,17 @@ function filterByCutoff(history: RawDataPoint<Candle>[], cutoff: string): RawDat
 }
 
 async function main() {
-  console.log('\n=== FALK GOLD Live (7 Timeframes + Normalization) ===');
+  console.log('\n=== FALK GOLD Live (7 TF + Normalization + Raw Storage) ===');
   console.log('   Timeframes: ' + DISPLAY_TFS.join(' | '));
   console.log('   Dashboard:  http://localhost:' + PORT + '\n');
 
   const dashboard = new DashboardServer(PORT);
   dashboard.start();
 
+  const rawStore = new RawStore();
   const audit = new HashChainAuditLog();
   const auth = new AuthorizationService(audit);
   const reg = new FeatureRegistry();
-
   for (const tf of TIMEFRAMES) {
     reg.register(makeSma20(tf.label, tf.ms));
     reg.register(makeRsi14(tf.label, tf.ms));
@@ -60,13 +61,13 @@ async function main() {
   const sink = new LocalFileOffsite('.backup');
   const backup = new BackupManager(audit, { rpoMs: 60000, rtoMs: 5000, offsiteRequired: true }, sink);
 
-  const processCandle = function (tfLabel: string, point: RawDataPoint<Candle>): void {
+  const processCandle = function (tfLabel: string, point: RawDataPoint<Candle>, lineage: LineageRef): void {
     try {
       const cutoff = point.availabilityTime;
       const hist = filterByCutoff(historiesByTf.get(tfLabel) || [], cutoff);
       if (hist.length === 0) return;
 
-      const canonical = toCanonical(point, tfLabel as any);
+      const canonical = toCanonical(point, tfLabel as any, lineage);
       const usability = assessUsability(canonical);
 
       const sources: Array<{ sourceId: string; points: RawDataPoint<Candle>[] }> = [
@@ -85,7 +86,7 @@ async function main() {
         snapshotRef: { snapshotId: 'live-' + tfLabel, contentFingerprint: point.fingerprint },
         sources,
         fusionPolicy: {
-          policyVersion: 'gold-multitf-v4',
+          policyVersion: 'gold-multitf-v5',
           priorityOrder: ['gold-xau', 'binance-paxg'],
           conflictStrategy: 'STRICT_PRIORITY',
           toleranceBps: 100,
@@ -142,7 +143,8 @@ async function main() {
       }
 
       console.log('[' + tfLabel + '] C=' + point.value.close.toFixed(2) +
-        ' | vol=' + canonical.volume_value + '(' + canonical.volume_semantics + ')' +
+        ' | src=' + canonical.source_symbol + '(' + canonical.volume_semantics + ')' +
+        ' | lineage=' + canonical.lineage_id.slice(0, 8) +
         ' | ' + result.executionStatus +
         ' | SMA=' + fmt(sma, 'N/A') + ' RSI=' + fmt(rsi, 'N/A') + ' ATR=' + fmt(atr, 'N/A'));
     } catch (e) {
@@ -150,7 +152,7 @@ async function main() {
     }
   };
 
-  const onCandle = function (tfLabel: string, p: RawDataPoint<Candle>, isHistory: boolean): void {
+  const onCandle = function (tfLabel: string, p: RawDataPoint<Candle>, isHistory: boolean, rawInfo: RawInfo): void {
     const hist = historiesByTf.get(tfLabel) || [];
     hist.push(p);
     if (hist.length > MAX_HISTORY) hist.shift();
@@ -160,15 +162,24 @@ async function main() {
       dashboard.broadcast({ type: 'candle', timeframe: tfLabel, data: { symbol: 'XAU', ...p }, status: 'BACKFILL' });
       return;
     }
-    processCandle(tfLabel, p);
+    processCandle(tfLabel, p, rawInfo.lineage);
   };
 
   try {
     console.log('[PAXG] Loading 100 bars (1m backup)...');
     const hist = await loadBinanceHistory(PAXG_BINANCE, 100);
-    for (const p of hist) {
-      paxgHistory.push(p);
-      dashboard.broadcast({ type: 'candle', timeframe: '1m', data: { symbol: 'PAXG', ...p }, status: 'BACKFILL' });
+    for (const rec of hist) {
+      paxgHistory.push(rec.point);
+      rawStore.save({
+        source_id: 'binance-paxg',
+        source_symbol: PAXG_BINANCE,
+        timeframe: '1m',
+        event_time_utc: rec.point.eventTime,
+        fetch_method: 'history',
+        fetched_at_utc: new Date().toISOString(),
+        payload: rec.rawRow,
+      });
+      dashboard.broadcast({ type: 'candle', timeframe: '1m', data: { symbol: 'PAXG', ...rec.point }, status: 'BACKFILL' });
     }
     console.log('[PAXG] Loaded ' + hist.length + ' bars');
   } catch (e) {
@@ -222,6 +233,15 @@ async function main() {
           };
           paxgHistory.push(p);
           if (paxgHistory.length > MAX_HISTORY) paxgHistory.shift();
+          rawStore.save({
+            source_id: 'binance-paxg',
+            source_symbol: PAXG_BINANCE,
+            timeframe: '1m',
+            event_time_utc: p.eventTime,
+            fetch_method: 'live-kline',
+            fetched_at_utc: new Date().toISOString(),
+            payload: k,
+          });
         }
       } catch (e) {
         console.warn('[WS] parse:', (e as Error).message);
