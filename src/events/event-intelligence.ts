@@ -4,7 +4,7 @@ import type { EconomicEvent, EventFeatures } from './types';
 import { fetchForexFactoryCalendar } from './forexfactory-calendar';
 import { fetchFinnhubForexNews, type NewsItem } from './finnhub-news';
 
-/** ¬ß11: Ÿäÿ¨ÿ® ŸÅÿµŸÑ event_time ÿπŸÜ published_at ÿπŸÜ received_at */
+/** ß11: separate event_time / published_at / received_at */
 export interface EventQuery {
   readonly asOfCutoff: Timestamp;
   readonly eventTimeUtc: Timestamp;
@@ -35,13 +35,14 @@ export class EventIntelligence {
     this.highImpactWindowMs = cfg.highImpactWindowMs ?? 30 * 60_000;
   }
 
-    async refreshIfNeeded(): Promise<void> {
+  async refreshIfNeeded(): Promise<void> {
     const now = Date.now();
     if (now - this.lastFetchAt < this.pollMs && this.events.length > 0) return;
 
-    // Rate limit: ForexFactory ·« Ì„— »‹ RateLimitManager ó  ÿ»Ìﬁ ÌœÊÌ »”Ìÿ
+    // Rate limit: ForexFactory is not routed through RateLimitManager,
+    // so we apply a manual 60s cooldown after any attempt (success or failure).
     if (now - this.lastFetchAt < 60_000) {
-      return; // 60s cooldown »⁄œ √Ì „Õ«Ê·… (‰ÃÕ  √Ê ›‘· )
+      return;
     }
 
     try {
@@ -51,9 +52,9 @@ export class EventIntelligence {
       console.log('[EVENTS] Loaded ' + events.length + ' economic events');
     } catch (e) {
       const msg = (e as Error).message;
-      this.lastFetchAt = now; // Õ Ï «·›‘· ÌÕ ”» ›Ì cooldown
+      this.lastFetchAt = now;
       if (msg.includes('429')) {
-        console.warn('[EVENTS] Rate limited (429) ó will retry in 5m');
+        console.warn('[EVENTS] Rate limited (429) - will retry in 5m');
       } else {
         console.warn('[EVENTS] Refresh failed:', msg);
       }
@@ -61,15 +62,15 @@ export class EventIntelligence {
   }
 
   /**
-   * ¬ß2 / ¬ß5.4: ŸÅŸÇÿ∑ ÿßŸÑÿ£ÿ≠ÿØÿßÿ´ ÿßŸÑÿ™Ÿä ŸÉÿßŸÜÿ™ ŸÖÿ™ÿßÿ≠ÿ© ŸÅÿπŸÑŸäÿßŸã ÿπŸÜÿØ asOfCutoff.
-   * ÿßŸÑÿ≠ŸÇŸÑ ÿßŸÑÿ≠ÿßÿ≥ŸÖ ŸáŸà published_at_utc (ŸàŸÑŸäÿ≥ event_time_utc).
+   * ß2 / ß5.4: only events actually available at asOfCutoff.
+   * The determining field is published_at_utc (NOT event_time_utc).
    */
   availableAt(cutoff: Timestamp): EconomicEvent[] {
     const cutMs = new Date(cutoff).getTime();
     return this.events.filter(e => new Date(e.published_at_utc).getTime() <= cutMs);
   }
 
-  /** ¬ß11: ŸÖŸäÿ≤ÿßÿ™ ŸÖÿ±ÿ™ÿ®ÿ∑ÿ© ÿ®ÿßŸÑÿ£ÿ≠ÿØÿßÿ´ÿå ŸÖÿ≠ÿ≥Ÿàÿ®ÿ© ŸÅŸÇÿ∑ ŸÖŸÜ ÿßŸÑŸÖÿπŸÑŸàŸÖÿ© ÿßŸÑŸÖÿ™ÿßÿ≠ÿ© */
+  /** ß11: event features, computed only from available information */
   computeFeatures(query: EventQuery): EventFeatures {
     const available = this.availableAt(query.asOfCutoff);
     const t = new Date(query.eventTimeUtc).getTime();
@@ -126,7 +127,7 @@ export class EventIntelligence {
     }
   }
 
-  /** ß2/ß11: news features „ﬁÌœ… »‹ published_at_utc */
+  /** ß2/ß11: news features, restricted to published_at_utc */
   computeNewsFeatures(query: EventQuery): NewsFeatures {
     const cutMs = new Date(query.asOfCutoff).getTime();
     const available = this.news.filter(n => new Date(n.published_at_utc).getTime() <= cutMs);

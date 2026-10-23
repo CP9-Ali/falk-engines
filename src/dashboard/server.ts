@@ -59,11 +59,11 @@ export class DashboardServer {
     }
   }
 
-    start(): void {
+  start(): void {
     this.httpServer.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'EADDRINUSE') {
-        console.error('\n? Port ' + this.port + ' already in use.');
-        console.error('   Fix: Get-Process node | Stop-Process -Force\n');
+        console.error('\nPort ' + this.port + ' already in use.');
+        console.error('Fix: Get-Process node | Stop-Process -Force\n');
         process.exit(1);
       } else {
         console.error('Server error:', err.message);
