@@ -4,6 +4,8 @@ import type { RawDataPoint } from '../core/types';
 import type { Candle } from '../data-quality/checks/base';
 import { RawStore, type RawRef } from '../storage/raw-store';
 import { CheckpointManager } from './checkpoint';
+import { RateLimitManager } from './rate-limiter';
+import { ErrorQueue } from './error-queue';
 
 interface Bar { start: number; open: number; high: number; low: number; close: number; }
 
@@ -43,6 +45,8 @@ export class TwelveDataWsSource {
   private lastEmittedBarStart = new Map<string, number>();
   private readonly rawStore = new RawStore();
   private readonly checkpoints = new CheckpointManager();
+  private readonly rateLimit = new RateLimitManager();
+  private readonly errors = new ErrorQueue();
 
   constructor(
     private readonly apiKey: string,
@@ -99,7 +103,20 @@ export class TwelveDataWsSource {
       '&outputsize=' + outputsize +
       '&timezone=UTC&apikey=' +
       encodeURIComponent(this.apiKey);
+    const permit = await this.rateLimit.waitUntilAllowed('twelvedata-ws');
+    if (!permit.allowed) {
+      this.errors.push({ source_id: 'twelvedata-ws', operation: 'history-fetch-' + tf.label, reason: permit.reason });
+      this.logErr(tf.label + ': rate limited (' + permit.reason + ')');
+      return;
+    }
     const res = await fetch(url);
+    if (res.status === 429) {
+      this.rateLimit.reportRateLimit('twelvedata-ws');
+      this.errors.push({ source_id: 'twelvedata-ws', operation: 'history-fetch-' + tf.label, reason: 'HTTP 429' });
+      this.logErr(tf.label + ': HTTP 429');
+      return;
+    }
+    this.rateLimit.reportSuccess('twelvedata-ws');
     const data = (await res.json()) as any;
     if (data.status === 'error') { this.logErr(tf.label + ': ' + (data.message || 'API error')); return; }
     if (!data.values || !Array.isArray(data.values)) return;

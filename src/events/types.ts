@@ -3,7 +3,6 @@ import type { Timestamp } from '../core/types';
 export type EventImpact = 'LOW' | 'MEDIUM' | 'HIGH';
 export type EventCategory = 'economic' | 'news' | 'geopolitical';
 
-/** §11: فصل واضح بين الأنواع الثلاثة من الوقت */
 export interface EconomicEvent {
   readonly event_id: string;
   readonly source_id: string;
@@ -12,18 +11,17 @@ export interface EconomicEvent {
   readonly currency_or_region: string;
   readonly impact: EventImpact;
 
-  /** وقت حدوث الحدث الفعلي (مثلاً 12:30 UTC لإصدار NFP) */
   readonly event_time_utc: Timestamp;
-
-  /** وقت النشر من المصدر (قد يتأخر عن event_time) */
   readonly published_at_utc: Timestamp;
-
-  /** وقت استلامنا (قد يتأخر أكثر) */
   readonly received_at_utc: Timestamp;
 
   readonly actual_value?: string | null;
   readonly forecast_value?: string | null;
   readonly previous_value?: string | null;
+
+  readonly revision?: number;
+  readonly source_reference?: string;
+  readonly data_vintage?: string;
 }
 
 export interface NewsItem {
@@ -35,6 +33,10 @@ export interface NewsItem {
   readonly published_at_utc: Timestamp;
   readonly received_at_utc: Timestamp;
   readonly relevance: 'xau' | 'usd' | 'macro' | 'other';
+
+  readonly revision?: number;
+  readonly source_reference?: string;
+  readonly data_vintage?: string;
 }
 
 export interface EventFeatures {

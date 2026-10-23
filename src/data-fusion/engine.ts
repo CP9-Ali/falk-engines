@@ -1,8 +1,22 @@
 import type { AuditLog } from '../audit/audit-log';
 import { FalkError } from '../core/errors';
 import { isAtOrBefore, now } from '../core/time';
+import { engineVersion } from '../core/versions';
 import type { FusionPolicy, FusionResult, SourceValue } from './types';
 import type { Timestamp } from '../core/types';
+
+export interface FusionReport {
+  readonly report_id: string;
+  readonly as_of_cutoff: string;
+  readonly policy_version: string;
+  readonly engine_version: string;
+  readonly conflict_status: string;
+  readonly fused_value: number | null;
+  readonly sources_used: number;
+  readonly sources_dropped: ReadonlyArray<{ sourceId: string; reason: string }>;
+  readonly provenance: ReadonlyArray<{ sourceId: string; weight: number }>;
+  readonly created_at_utc: string;
+}
 
 const V = {
   schemaVersion: '1.0',
@@ -12,10 +26,7 @@ const V = {
 export class DataFusionEngine {
   private readonly lastChosenSource = new Map<string, string>();
 
-  constructor(
-    private readonly audit: AuditLog,
-    private readonly engineVersion: string,
-  ) {}
+  constructor(private readonly audit: AuditLog, private readonly engineVersion: string) {}
 
   fuse<T extends { close: number }>(
     inputs: ReadonlyArray<SourceValue<T>>,
@@ -50,7 +61,6 @@ export class DataFusionEngine {
 
     let chosen = prioritized[0]!;
 
-    // §4: حجب التبديل — نُسجّل الحدث دائماً عند محاولة التبديل
     const previous = this.lastChosenSource.get(streamKey);
     if (previous && previous !== chosen.sourceId && !policy.allowSourceSwitching) {
       const prev = prioritized.find(s => s.sourceId === previous);
@@ -76,7 +86,6 @@ export class DataFusionEngine {
       if (prev) {
         chosen = prev;
       }
-      // إن لم يكن المصدر السابق موجوداً، نستخدم الجديد بعد التسجيل
     }
     this.lastChosenSource.set(streamKey, chosen.sourceId);
 
@@ -167,6 +176,27 @@ export class DataFusionEngine {
       droppedSources: dropped,
       asOfCutoff,
       policyVersion: policy.policyVersion,
+    };
+  }
+
+  /** §6: يحوّل نتيجة fusion إلى تقرير قابل للحفظ */
+  buildReport(
+    result: FusionResult<any>,
+    policy: FusionPolicy,
+  ): FusionReport {
+    return {
+      report_id: 'frep-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+      as_of_cutoff: result.asOfCutoff,
+      policy_version: policy.policyVersion,
+      engine_version: engineVersion('fusion'),
+      conflict_status: result.conflictStatus,
+      fused_value: result.fusedValue && (result.fusedValue as any).close !== undefined
+        ? (result.fusedValue as any).close
+        : null,
+      sources_used: result.provenance.length,
+      sources_dropped: result.droppedSources.map(d => ({ sourceId: d.sourceId, reason: d.reason })),
+      provenance: result.provenance.map(p => ({ sourceId: p.sourceId, weight: p.weight })),
+      created_at_utc: new Date().toISOString(),
     };
   }
 }

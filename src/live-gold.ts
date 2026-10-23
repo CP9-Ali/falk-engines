@@ -1,6 +1,7 @@
 import WebSocket from 'ws';
 import 'dotenv/config';
 import { runPipeline } from './integration/pipeline';
+import { DataFusionEngine } from './data-fusion/engine';
 import { FeatureRegistry } from './feature-engineering/registry';
 import { makeSma20, makeRsi14, makeAtr14 } from './feature-engineering/financial';
 import { structuralCheck } from './data-quality/checks/structural';
@@ -20,6 +21,7 @@ import { SourceRegistry } from './ingestion/source-registry';
 import { aggregateCandles, compareTimeframes } from './multi-timeframe/aggregator';
 import { AggregationSource } from './multi-timeframe/aggregation-source';
 import { classifySession } from './calendar/session-calendar';
+import { RunContextStore } from './replay/run-context';
 import { EventIntelligence } from './events/event-intelligence';
 import type { RawDataPoint } from './core/types';
 import type { Candle } from './data-quality/checks/base';
@@ -84,7 +86,36 @@ async function main() {
     reg.register(makeRsi14(tf.label, tf.ms));
     reg.register(makeAtr14(tf.label, tf.ms));
   }
-
+  // §13: ?????? run context — íÍÝÙ ßá ãÇ íáÒã áÅÚÇÏÉ ÇáÊÔÛíá
+  const runStore = new RunContextStore('.backup/runs');
+  const analysisRunId = RunContextStore.newRunId();
+  const settingsSnapshot = {
+    timeframes: TIMEFRAMES.map(t => ({ label: t.label, ms: t.ms })),
+    display: DISPLAY_TFS,
+    fusion_policy_version: 'gold-multitf-v6',
+    quality_checks: ['structural', 'completeness', 'schema', 'duplicate', 'cross-field'],
+    feature_ids: TIMEFRAMES.flatMap(t => ['sma_20_' + t.label, 'rsi_14_' + t.label, 'atr_14_' + t.label]),
+    event_sources: ['forexfactory', 'finnhub'],
+    port: PORT,
+  };
+  runStore.save({
+    analysis_run_id: analysisRunId,
+    started_at_utc: new Date().toISOString(),
+    settings_snapshot: settingsSnapshot,
+    versions: {
+      code_version: '1.0.0',
+      schema_version: '1.0',
+      policy_version: 'gold-multitf-v6',
+      config_version: '1.0',
+    },
+    feature_definitions: TIMEFRAMES.flatMap(t => [
+      { feature_id: 'sma_20_' + t.label, definition_version: '1.0.0', parameters: { period: 20 } },
+      { feature_id: 'rsi_14_' + t.label, definition_version: '1.0.0', parameters: { period: 14 } },
+      { feature_id: 'atr_14_' + t.label, definition_version: '1.0.0', parameters: { period: 14 } },
+    ]),
+    settings_hash: RunContextStore.hashSettings(settingsSnapshot),
+  });
+  console.log('[RUN] analysis_run_id: ' + analysisRunId);
   const sink = new LocalFileOffsite('.backup');
   const backup = new BackupManager(audit, { rpoMs: 60000, rtoMs: 5000, offsiteRequired: true }, sink);
 
@@ -187,6 +218,26 @@ async function main() {
 
       if (result.fused) {
         dashboard.broadcast({ type: 'fusion', timeframe: tfLabel, data: { value: result.fused.value, conflict: result.fused.conflictStatus } });
+      }
+
+      if (result.fused) {
+        try {
+          const frep = new DataFusionEngine(audit, '1.0').buildReport({
+            fusedValue: result.fused.value !== null ? { close: result.fused.value } : null,
+            conflictStatus: result.fused.conflictStatus as any,
+            provenance: [],
+            droppedSources: [],
+            asOfCutoff: cutoff,
+            policyVersion: 'gold-multitf-v6',
+          }, {
+            policyVersion: 'gold-multitf-v6',
+            priorityOrder: ['gold-xau', 'binance-paxg'],
+            conflictStrategy: 'STRICT_PRIORITY',
+            toleranceBps: 100,
+            allowSourceSwitching: false,
+          });
+          backup.takeSnapshot('INCREMENTAL', JSON.stringify({ kind: 'fusion-report', timeframe: tfLabel, report: frep }), 'fusion-reporter');
+        } catch { /* ignore */ }
       }
 
       if (tfLabel === '1m' || tfLabel === '15m' || tfLabel === '1h') {

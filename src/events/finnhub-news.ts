@@ -14,9 +14,11 @@ export interface NewsItem {
   readonly direction: NewsDirection;
   readonly relevance: NewsRelevance;
   readonly sentiment_method: 'heuristic_v1';
+  readonly revision?: number;
+  readonly source_reference?: string;
+  readonly data_vintage?: string;
 }
 
-// §10: تصنيف بسيط صريح — ليس نموذج تعلّم
 const BULLISH_KW = [
   'surge', 'rally', 'soar', 'gain', 'rise', 'jump', 'climb',
   'record high', 'all-time high', 'safe haven', 'risk-off',
@@ -85,6 +87,9 @@ export async function fetchFinnhubForexNews(apiKey: string): Promise<NewsItem[]>
       direction: classifyDirection(text),
       relevance: classifyRelevance(text),
       sentiment_method: 'heuristic_v1',
+      revision: 1,
+      source_reference: r.url || FINNHUB_BASE,
+      data_vintage: 'fh-latest',
     });
   }
 

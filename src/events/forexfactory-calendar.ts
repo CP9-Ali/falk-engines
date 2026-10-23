@@ -49,6 +49,9 @@ export async function fetchForexFactoryCalendar(): Promise<EconomicEvent[]> {
       actual_value: r.actual ?? null,
       forecast_value: r.forecast ?? null,
       previous_value: r.previous ?? null,
+      revision: 1,
+      source_reference: CALENDAR_URL,
+      data_vintage: 'ff-weekly',
     });
   }
 
