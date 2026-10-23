@@ -35,16 +35,28 @@ export class EventIntelligence {
     this.highImpactWindowMs = cfg.highImpactWindowMs ?? 30 * 60_000;
   }
 
-  async refreshIfNeeded(): Promise<void> {
+    async refreshIfNeeded(): Promise<void> {
     const now = Date.now();
     if (now - this.lastFetchAt < this.pollMs && this.events.length > 0) return;
+
+    // Rate limit: ForexFactory ·« Ì„— »‹ RateLimitManager ó  ÿ»Ìﬁ ÌœÊÌ »”Ìÿ
+    if (now - this.lastFetchAt < 60_000) {
+      return; // 60s cooldown »⁄œ √Ì „Õ«Ê·… (‰ÃÕ  √Ê ›‘· )
+    }
+
     try {
       const events = await fetchForexFactoryCalendar();
       this.events = events;
       this.lastFetchAt = now;
       console.log('[EVENTS] Loaded ' + events.length + ' economic events');
     } catch (e) {
-      console.warn('[EVENTS] Refresh failed:', (e as Error).message);
+      const msg = (e as Error).message;
+      this.lastFetchAt = now; // Õ Ï «·›‘· ÌÕ ”» ›Ì cooldown
+      if (msg.includes('429')) {
+        console.warn('[EVENTS] Rate limited (429) ó will retry in 5m');
+      } else {
+        console.warn('[EVENTS] Refresh failed:', msg);
+      }
     }
   }
 

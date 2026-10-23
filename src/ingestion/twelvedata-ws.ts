@@ -6,6 +6,7 @@ import { RawStore, type RawRef } from '../storage/raw-store';
 import { CheckpointManager } from './checkpoint';
 import { RateLimitManager } from './rate-limiter';
 import { ErrorQueue } from './error-queue';
+import { RequestTracker } from './request-tracker';
 
 interface Bar { start: number; open: number; high: number; low: number; close: number; }
 
@@ -47,6 +48,7 @@ export class TwelveDataWsSource {
   private readonly checkpoints = new CheckpointManager();
   private readonly rateLimit = new RateLimitManager();
   private readonly errors = new ErrorQueue();
+  private readonly requests = new RequestTracker();
 
   constructor(
     private readonly apiKey: string,
@@ -104,8 +106,10 @@ export class TwelveDataWsSource {
       '&timezone=UTC&apikey=' +
       encodeURIComponent(this.apiKey);
     const permit = await this.rateLimit.waitUntilAllowed('twelvedata-ws');
+    const req = this.requests.begin('twelvedata-ws', 'history-fetch-' + tf.label);
     if (!permit.allowed) {
       this.errors.push({ source_id: 'twelvedata-ws', operation: 'history-fetch-' + tf.label, reason: permit.reason });
+      this.requests.complete(req.log, 'SKIPPED', { reason: permit.reason });
       this.logErr(tf.label + ': rate limited (' + permit.reason + ')');
       return;
     }
@@ -113,12 +117,18 @@ export class TwelveDataWsSource {
     if (res.status === 429) {
       this.rateLimit.reportRateLimit('twelvedata-ws');
       this.errors.push({ source_id: 'twelvedata-ws', operation: 'history-fetch-' + tf.label, reason: 'HTTP 429' });
+      this.requests.complete(req.log, 'FAILED', { reason: 'HTTP 429' });
       this.logErr(tf.label + ': HTTP 429');
       return;
     }
     this.rateLimit.reportSuccess('twelvedata-ws');
     const data = (await res.json()) as any;
-    if (data.status === 'error') { this.logErr(tf.label + ': ' + (data.message || 'API error')); return; }
+    if (data.status === 'error') {
+      this.requests.complete(req.log, 'FAILED', { reason: data.message || 'API error' });
+      this.logErr(tf.label + ': ' + (data.message || 'API error'));
+      return;
+    }
+    this.requests.complete(req.log, 'SUCCESS', { payload_size: Array.isArray(data.values) ? data.values.length : 0 });
     if (!data.values || !Array.isArray(data.values)) return;
 
     let count = 0;

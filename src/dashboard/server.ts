@@ -59,8 +59,21 @@ export class DashboardServer {
     }
   }
 
-  start(): void {
-    this.httpServer.listen(this.port, () => console.log('[Dashboard] Open: http://localhost:' + this.port));
+    start(): void {
+    this.httpServer.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error('\n? Port ' + this.port + ' already in use.');
+        console.error('   Fix: Get-Process node | Stop-Process -Force\n');
+        process.exit(1);
+      } else {
+        console.error('Server error:', err.message);
+        process.exit(1);
+      }
+    });
+
+    this.httpServer.listen(this.port, () => {
+      console.log('[Dashboard] Open: http://localhost:' + this.port);
+    });
   }
 
   stop(): void {

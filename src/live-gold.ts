@@ -9,6 +9,8 @@ import { completenessCheck } from './data-quality/checks/completeness';
 import { schemaCheck } from './data-quality/checks/schema';
 import { duplicateCheck } from './data-quality/checks/duplicate';
 import { crossFieldCheck } from './data-quality/checks/cross-field';
+import { missingCheck } from './data-quality/checks/missing';
+import { timestampCheck } from './data-quality/checks/timestamp';
 import { HashChainAuditLog } from './audit/audit-log';
 import { AuthorizationService } from './security/permissions';
 import { LocalFileOffsite, BackupManager } from './backup/backup-manager';
@@ -26,6 +28,7 @@ import { EventIntelligence } from './events/event-intelligence';
 import type { RawDataPoint } from './core/types';
 import type { Candle } from './data-quality/checks/base';
 import type { FeatureComputeResult } from './feature-engineering/types';
+import { HistoryRestorer } from './ingestion/history-restorer';
 
 const PAXG_SYMBOL = 'paxgusdt';
 const PAXG_BINANCE = 'PAXGUSDT';
@@ -85,6 +88,20 @@ async function main() {
     reg.register(makeSma20(tf.label, tf.ms));
     reg.register(makeRsi14(tf.label, tf.ms));
     reg.register(makeAtr14(tf.label, tf.ms));
+  }
+  // «” ⁄«œ… histories „‰ raw files ﬁ»· »œ¡ WebSocket
+  const restorer = new HistoryRestorer('.backup/raw');
+  for (const tf of TIMEFRAMES) {
+    const restored = restorer.restore('twelvedata-ws', tf.label, 200);
+    if (restored.length > 0) {
+      historiesByTf.set(tf.label, restored);
+      console.log('[RESTORE] ' + tf.label + ': ' + restored.length + ' candles');
+    }
+  }
+  const restoredPaxg = restorer.restore('binance-paxg', '1m', 100);
+  if (restoredPaxg.length > 0) {
+    for (const p of restoredPaxg) paxgHistory.push(p);
+    console.log('[RESTORE] binance-paxg/1m: ' + restoredPaxg.length + ' candles');
   }
   // ß13: ?????? run context ó ÌÕ›Ÿ ﬂ· „« Ì·“„ ·≈⁄«œ… «· ‘€Ì·
   const runStore = new RunContextStore('.backup/runs');
@@ -191,7 +208,7 @@ async function main() {
           ['rsi_14_' + tfLabel, hist],
           ['atr_14_' + tfLabel, hist]
         ])
-      }, { qualityChecks: [structuralCheck, completenessCheck, schemaCheck, duplicateCheck, crossFieldCheck], featureRegistry: reg, audit: audit, auth: auth });
+      }, { qualityChecks: [structuralCheck, completenessCheck, schemaCheck, duplicateCheck, crossFieldCheck, missingCheck, timestampCheck], featureRegistry: reg, audit: audit, auth: auth });
 
       const sma = result.features.get('sma_20_' + tfLabel);
       const rsi = result.features.get('rsi_14_' + tfLabel);
