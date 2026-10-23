@@ -2,6 +2,8 @@ import type { QualityCheck } from './base';
 
 export const structuralCheck: QualityCheck = {
   checkId: 'DQ-STRUCT',
+  checkVersion: '1.0.0',
+  parameters: {},
   run(ctx) {
     const out = [];
     for (const p of ctx.points) {

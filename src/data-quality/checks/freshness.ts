@@ -4,6 +4,8 @@ export interface FreshnessConfig { readonly maxLagMs: number; }
 
 export const makeFreshnessCheck = (cfg: FreshnessConfig): QualityCheck => ({
   checkId: 'DQ-FRESH',
+  checkVersion: '1.0.0',
+  parameters: {},
   run(ctx) {
     if (ctx.points.length === 0) return [];
     const last = [...ctx.points]

@@ -7,6 +7,8 @@ export interface AnomalyConfig {
 
 export const makeAnomalyCheck = (cfg: AnomalyConfig): QualityCheck => ({
   checkId: 'DQ-ANOMALY',
+  checkVersion: '1.0.0',
+  parameters: {},
   run(ctx) {
     const out = [];
     const pts = [...ctx.points].sort(

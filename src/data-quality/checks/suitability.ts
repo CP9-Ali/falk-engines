@@ -8,6 +8,8 @@ export interface TaskRequirement {
 
 export const makeSuitabilityCheck = (req: TaskRequirement): QualityCheck => ({
   checkId: 'DQ-SUIT',
+  checkVersion: '1.0.0',
+  parameters: {},
   run(ctx) {
     const out = [];
     const available = ctx.points

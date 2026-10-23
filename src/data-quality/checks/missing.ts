@@ -11,6 +11,8 @@ import type { QualityCheck } from './base';
  */
 export const missingCheck: QualityCheck = {
   checkId: 'DQ-MISSING',
+  checkVersion: '1.0.0',
+  parameters: {},
   run(ctx) {
     const out = [];
     const requiredFields = ['open', 'high', 'low', 'close', 'volume'];

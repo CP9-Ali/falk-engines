@@ -2,6 +2,8 @@ import type { QualityCheck } from './base';
 
 export const completenessCheck: QualityCheck = {
   checkId: 'DQ-COMPLETE',
+  checkVersion: '1.0.0',
+  parameters: {},
   run(ctx) {
     const out = [];
     const pts = [...ctx.points].sort(

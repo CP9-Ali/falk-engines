@@ -2,6 +2,8 @@ import type { QualityCheck, CheckContext, Candle } from './base';
 
 export const schemaCheck: QualityCheck = {
   checkId: 'DQ-SCHEMA',
+  checkVersion: '1.0.0',
+  parameters: {},
   run(ctx: CheckContext<Candle>) {
     const out = [];
     const required: Record<string, 'number' | 'string'> = {

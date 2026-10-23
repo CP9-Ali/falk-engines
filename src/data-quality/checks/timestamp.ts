@@ -9,6 +9,8 @@ import type { QualityCheck } from './base';
  */
 export const timestampCheck: QualityCheck = {
   checkId: 'DQ-TIMESTAMP',
+  checkVersion: '1.0.0',
+  parameters: {},
   run(ctx) {
     const out = [];
     const nowMs = new Date(ctx.asOfCutoff).getTime();

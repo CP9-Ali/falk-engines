@@ -6,6 +6,8 @@ import type { QualityCheck, CheckContext, Candle } from './base';
  */
 export const crossFieldCheck: QualityCheck = {
   checkId: 'DQ-CROSS',
+  checkVersion: '1.0.0',
+  parameters: {},
   run(ctx: CheckContext<Candle>) {
     const out = [];
     for (const p of ctx.points) {
