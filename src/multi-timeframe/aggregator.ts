@@ -13,6 +13,8 @@ export const TF_MS: Record<TF, number> = {
   '1w': 604_800_000,
 };
 
+export type SourceOrigin = 'direct' | 'aggregated';
+
 export interface AggregationResult {
   readonly point: RawDataPoint<Candle>;
   readonly source_candle_count: number;

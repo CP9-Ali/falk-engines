@@ -5,6 +5,9 @@ import { FeatureRegistry } from './feature-engineering/registry';
 import { makeSma20, makeRsi14, makeAtr14 } from './feature-engineering/financial';
 import { structuralCheck } from './data-quality/checks/structural';
 import { completenessCheck } from './data-quality/checks/completeness';
+import { schemaCheck } from './data-quality/checks/schema';
+import { duplicateCheck } from './data-quality/checks/duplicate';
+import { crossFieldCheck } from './data-quality/checks/cross-field';
 import { HashChainAuditLog } from './audit/audit-log';
 import { AuthorizationService } from './security/permissions';
 import { LocalFileOffsite, BackupManager } from './backup/backup-manager';
@@ -15,6 +18,8 @@ import { toCanonical, assessUsability, type LineageRef } from './normalization/c
 import { RawStore } from './storage/raw-store';
 import { SourceRegistry } from './ingestion/source-registry';
 import { aggregateCandles, compareTimeframes } from './multi-timeframe/aggregator';
+import { AggregationSource } from './multi-timeframe/aggregation-source';
+import { classifySession } from './calendar/session-calendar';
 import { EventIntelligence } from './events/event-intelligence';
 import type { RawDataPoint } from './core/types';
 import type { Candle } from './data-quality/checks/base';
@@ -67,8 +72,11 @@ async function main() {
   const registry = new SourceRegistry();
   const eventIntel = new EventIntelligence({ pollMs: 5 * 60_000, highImpactWindowMs: 30 * 60_000 });
   eventIntel.refreshIfNeeded().catch(() => {});
-  setInterval(() => { eventIntel.refreshIfNeeded().catch(() => {}); }, 5 * 60_000);
+  const finnhubKey = process.env.FINNHUB_API_KEY || '';
+  eventIntel.refreshNewsIfNeeded(finnhubKey).catch(() => {});
+  setInterval(() => { eventIntel.refreshIfNeeded().catch(() => {}); eventIntel.refreshNewsIfNeeded(finnhubKey).catch(() => {}); }, 5 * 60_000);
   const audit = new HashChainAuditLog();
+  const aggSource = new AggregationSource(audit);
   const auth = new AuthorizationService(audit);
   const reg = new FeatureRegistry();
   for (const tf of TIMEFRAMES) {
@@ -152,7 +160,7 @@ async function main() {
           ['rsi_14_' + tfLabel, hist],
           ['atr_14_' + tfLabel, hist]
         ])
-      }, { qualityChecks: [structuralCheck, completenessCheck], featureRegistry: reg, audit: audit, auth: auth });
+      }, { qualityChecks: [structuralCheck, completenessCheck, schemaCheck, duplicateCheck, crossFieldCheck], featureRegistry: reg, audit: audit, auth: auth });
 
       const sma = result.features.get('sma_20_' + tfLabel);
       const rsi = result.features.get('rsi_14_' + tfLabel);
@@ -194,6 +202,10 @@ async function main() {
 
       const evFeatures = eventIntel.computeFeatures({ asOfCutoff: cutoff, eventTimeUtc: point.eventTime });
       dashboard.broadcast({ type: 'feature', timeframe: tfLabel, data: { name: 'news', value: evFeatures.is_high_impact_active ? 1 : 0 } });
+      const newsFeatures = eventIntel.computeNewsFeatures({ asOfCutoff: cutoff, eventTimeUtc: point.eventTime });
+      const newsLine = newsFeatures.news_count_1h > 0
+        ? ' | news:' + newsFeatures.news_bias + '(' + newsFeatures.news_count_1h + ')'
+        : '';
       const evLine = evFeatures.is_high_impact_active ? ' | NEWS=active' : (evFeatures.minutes_since_last_high !== null ? ' | last_high=' + evFeatures.minutes_since_last_high + 'm' : '');
 
       const logLine =

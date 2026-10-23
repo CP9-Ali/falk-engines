@@ -52,10 +52,10 @@ export class FeatureEngineeringEngine {
         result = def.compute({
           asOfCutoff: req.asOfCutoff,
           definitionVersion: def.definitionVersion,
-          // ✅ يستخدم سياسة الدمج، لا سياسة محرك الخصائص
           policyVersion: req.fusionPolicyVersion,
           guard,
           inputs,
+          parameters: def.parameters ?? {},
           dependencyResults: results,
           snapshotRef: req.snapshotRef,
         });
@@ -66,7 +66,7 @@ export class FeatureEngineeringEngine {
       if (result.status === 'VALID' && result.value !== null) {
         for (const rule of def.validationRules) {
           if (!rule.check(result.value as never)) {
-            result = { ...result, status: 'UNDER_VALIDATION', error: `Rule "${rule.name}" failed` };
+            result = { ...result, status: 'UNDER_VALIDATION', error: 'Rule "' + rule.name + '" failed' };
             break;
           }
         }
@@ -81,7 +81,7 @@ export class FeatureEngineeringEngine {
         refs: { snapshotId: req.snapshotRef.snapshotId },
         versions: {
           schemaVersion: '1.0',
-          policyVersion: this.config.policyVersion,
+          policyVersion: req.fusionPolicyVersion,
           configVersion: this.config.configVersion,
           engineVersion: this.config.engineVersion,
         },
@@ -100,10 +100,7 @@ export class FeatureEngineeringEngine {
       changed = false;
       for (const def of this.registry.all()) {
         if (affected.has(def.featureId)) continue;
-        if (def.dependencies.some(d => affected.has(d))) {
-          affected.add(def.featureId);
-          changed = true;
-        }
+        if (def.dependencies.some(d => affected.has(d))) { affected.add(def.featureId); changed = true; }
       }
     }
     return this.computeBatch({ ...req, targets: req.targets.filter(t => affected.has(t.featureId)) });
@@ -115,7 +112,7 @@ export class FeatureEngineeringEngine {
     const byId = new Map(targets.map(t => [t.featureId, t]));
     const visit = (id: string): void => {
       if (visited.has(id)) return;
-      if (visiting.has(id)) throw new FalkError(`Dependency cycle at ${id}`, 'DEPENDENCY_CYCLE');
+      if (visiting.has(id)) throw new FalkError('Dependency cycle at ' + id, 'DEPENDENCY_CYCLE');
       visiting.add(id);
       const t = byId.get(id);
       if (t) {
@@ -130,21 +127,13 @@ export class FeatureEngineeringEngine {
     return order;
   }
 
-  private makeEmpty(
-    def: FeatureDefinition,
-    req: BatchRequest,
-    status: FeatureComputeResult['status'],
-    error: string,
-  ): FeatureComputeResult {
+  private makeEmpty(def: FeatureDefinition, req: BatchRequest, status: FeatureComputeResult['status'], error: string): FeatureComputeResult {
     return {
-      featureId: def.featureId,
-      definitionVersion: def.definitionVersion,
-      status,
-      value: null,
-      asOfCutoff: req.asOfCutoff,
-      computedAt: now(),
-      availabilityTime: null,
-      error,
+      featureId: def.featureId, definitionVersion: def.definitionVersion,
+      status, value: null,
+      asOfCutoff: req.asOfCutoff, computedAt: now(),
+      availabilityTime: null, error,
+      parameters: def.parameters ?? {},
       snapshotRef: req.snapshotRef,
       fusionPolicyVersion: req.fusionPolicyVersion,
     };

@@ -24,18 +24,19 @@ export class ShadowTester {
     policyVersion: string,
   ): ShadowComparison {
     const guard = new LookaheadGuard(asOfCutoff);
-    const ctx = {
-      asOfCutoff,
-      policyVersion,
-      guard,
-      inputs,
-      dependencyResults: new Map<string, FeatureComputeResult>(),
-      snapshotRef,
-    };
 
     const runOne = (def: FeatureDefinition<In, Out>): FeatureComputeResult => {
       try {
-        return def.compute({ ...ctx, definitionVersion: def.definitionVersion });
+        return def.compute({
+          asOfCutoff,
+          policyVersion,
+          guard,
+          inputs,
+          parameters: def.parameters ?? {},
+          dependencyResults: new Map<string, FeatureComputeResult>(),
+          snapshotRef,
+          definitionVersion: def.definitionVersion,
+        });
       } catch (e) {
         return {
           featureId: def.featureId,
@@ -46,6 +47,7 @@ export class ShadowTester {
           computedAt: asOfCutoff,
           availabilityTime: null,
           error: (e as Error).message,
+          parameters: def.parameters ?? {},
           snapshotRef,
           fusionPolicyVersion: policyVersion,
         };

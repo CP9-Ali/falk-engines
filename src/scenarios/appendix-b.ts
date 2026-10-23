@@ -121,7 +121,7 @@ export function scenario5_engineFailure(): ScenarioResult {
   registry.register({
     featureId: 'broken_feature', definitionVersion: '1.0.0', timeframe: '1h', minHistoryMs: 0,
     availabilityRule: { requireClosedCandle: true, expectedLagMs: 1000 },
-    inputsRequired: [], dependencies: [], unit: 'x', validationRules: [],
+    inputsRequired: [], dependencies: [], unit: 'x', parameters: {}, validationRules: [],
     compute() { throw new Error('simulated crash'); },
   });
   const fe = new FeatureEngineeringEngine(

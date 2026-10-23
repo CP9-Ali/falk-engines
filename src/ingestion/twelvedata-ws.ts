@@ -81,10 +81,22 @@ export class TwelveDataWsSource {
 
   private async loadHistory(tf: Timeframe): Promise<void> {
     console.log('[TD-WS] Loading ' + tf.label + ' history...');
+
+    const cp = this.checkpoints.get('twelvedata-ws', tf.label);
+    const lastSync = cp ? new Date(cp.last_event_time_utc).getTime() : 0;
+
+    let outputsize = tf.historySize;
+    if (lastSync > 0) {
+      const gapMs = Date.now() - lastSync;
+      const missingBars = Math.ceil(gapMs / tf.ms);
+      outputsize = Math.min(tf.historySize, missingBars + 10);
+      console.log('[TD-WS] ' + tf.label + ' checkpoint found, requesting ' + outputsize + ' bars (was ' + tf.historySize + ')');
+    }
+
     const url = 'https://api.twelvedata.com/time_series?symbol=' +
       encodeURIComponent(this.symbol) +
       '&interval=' + tf.twelveDataInterval +
-      '&outputsize=' + tf.historySize +
+      '&outputsize=' + outputsize +
       '&timezone=UTC&apikey=' +
       encodeURIComponent(this.apiKey);
     const res = await fetch(url);
@@ -94,7 +106,6 @@ export class TwelveDataWsSource {
 
     let count = 0;
     const now = Date.now();
-    const lastStart = this.lastEmittedBarStart.get(tf.label) || 0;
     const values = [...data.values].reverse();
 
     for (const v of values) {
@@ -102,7 +113,8 @@ export class TwelveDataWsSource {
       const barStart = new Date(dt).getTime();
       if (!Number.isFinite(barStart)) continue;
       if (barStart + tf.ms > now) continue;
-      if (barStart <= lastStart) continue;
+      if (barStart <= lastSync) continue;
+
       const o = parseFloat(v.open), h = parseFloat(v.high);
       const l = parseFloat(v.low), c = parseFloat(v.close);
       if (!Number.isFinite(o) || !Number.isFinite(c)) continue;
@@ -133,7 +145,7 @@ export class TwelveDataWsSource {
       this.checkpoints.update('twelvedata-ws', tf.label, p.eventTime, lineage.payload_hash);
       count++;
     }
-    console.log('[TD-WS] Loaded ' + count + ' ' + tf.label + ' bars');
+    console.log('[TD-WS] Loaded ' + count + ' new ' + tf.label + ' bars');
   }
 
   private connect(): void {

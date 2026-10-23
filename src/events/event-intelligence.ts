@@ -2,11 +2,19 @@ import 'dotenv/config';
 import type { Timestamp } from '../core/types';
 import type { EconomicEvent, EventFeatures } from './types';
 import { fetchForexFactoryCalendar } from './forexfactory-calendar';
+import { fetchFinnhubForexNews, type NewsItem } from './finnhub-news';
 
 /** ¬ß11: Ÿäÿ¨ÿ® ŸÅÿµŸÑ event_time ÿπŸÜ published_at ÿπŸÜ received_at */
 export interface EventQuery {
   readonly asOfCutoff: Timestamp;
   readonly eventTimeUtc: Timestamp;
+}
+
+export interface NewsFeatures {
+  readonly news_count_1h: number;
+  readonly last_news_minutes_ago: number | null;
+  readonly news_bias: 'BULLISH' | 'BEARISH' | 'NEUTRAL' | 'MIXED';
+  readonly last_news_headline: string | null;
 }
 
 export interface EventIntelligenceConfig {
@@ -17,6 +25,8 @@ export interface EventIntelligenceConfig {
 export class EventIntelligence {
   private events: EconomicEvent[] = [];
   private lastFetchAt = 0;
+  private news: NewsItem[] = [];
+  private lastNewsFetchAt = 0;
   private readonly pollMs: number;
   private readonly highImpactWindowMs: number;
 
@@ -89,6 +99,56 @@ export class EventIntelligence {
       last_high_event_time_utc: lastHigh ? lastHigh.event_time_utc : null,
     };
   }
+
+  async refreshNewsIfNeeded(finnhubKey: string): Promise<void> {
+    if (!finnhubKey) return;
+    const now = Date.now();
+    if (now - this.lastNewsFetchAt < this.pollMs && this.news.length > 0) return;
+    try {
+      const items = await fetchFinnhubForexNews(finnhubKey);
+      this.news = items;
+      this.lastNewsFetchAt = now;
+      console.log('[NEWS] Loaded ' + items.length + ' forex news items');
+    } catch (e) {
+      console.warn('[NEWS] Refresh failed:', (e as Error).message);
+    }
+  }
+
+  /** ß2/ß11: news features „ﬁÌœ… »‹ published_at_utc */
+  computeNewsFeatures(query: EventQuery): NewsFeatures {
+    const cutMs = new Date(query.asOfCutoff).getTime();
+    const available = this.news.filter(n => new Date(n.published_at_utc).getTime() <= cutMs);
+    const t = new Date(query.eventTimeUtc).getTime();
+    const hourAgo = t - 60 * 60_000;
+
+    const recent = available.filter(n => {
+      const p = new Date(n.published_at_utc).getTime();
+      return p >= hourAgo && p <= t;
+    });
+
+    let bull = 0, bear = 0;
+    for (const n of recent) {
+      if (n.direction === 'BULLISH') bull++;
+      else if (n.direction === 'BEARISH') bear++;
+    }
+    let bias: NewsFeatures['news_bias'] = 'NEUTRAL';
+    if (bull > bear) bias = 'BULLISH';
+    else if (bear > bull) bias = 'BEARISH';
+    else if (bull > 0 && bull === bear) bias = 'MIXED';
+
+    const lastNews = available
+      .filter(n => new Date(n.published_at_utc).getTime() <= t)
+      .sort((a, b) => new Date(b.published_at_utc).getTime() - new Date(a.published_at_utc).getTime())[0];
+
+    return {
+      news_count_1h: recent.length,
+      last_news_minutes_ago: lastNews ? Math.round((t - new Date(lastNews.published_at_utc).getTime()) / 60_000) : null,
+      news_bias: bias,
+      last_news_headline: lastNews ? lastNews.headline : null,
+    };
+  }
+
+  getAllNews(): ReadonlyArray<NewsItem> { return this.news; }
 
   getAll(): ReadonlyArray<EconomicEvent> {
     return this.events;

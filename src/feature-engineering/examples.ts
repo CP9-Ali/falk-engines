@@ -12,6 +12,7 @@ export const simpleReturn1h: FeatureDefinition<ReadonlyArray<RawDataPoint<{ clos
   inputsRequired: ['close_series_1h'],
   dependencies: [],
   unit: 'ratio',
+  parameters: { timeframeMs: 60 * 60 * 1000 },
   validationRules: [
     { name: 'finite', check: v => Number.isFinite(v) },
     { name: 'reasonable', check: v => Math.abs(v) < 10 },
@@ -19,7 +20,7 @@ export const simpleReturn1h: FeatureDefinition<ReadonlyArray<RawDataPoint<{ clos
   compute(ctx) {
     ctx.guard.assertNoLeak(ctx.inputs);
 
-    const timeframeMs = 60 * 60 * 1000;
+    const timeframeMs = ctx.parameters?.timeframeMs ?? 60 * 60 * 1000;
     const closedPoints = this.availabilityRule.requireClosedCandle
       ? ctx.inputs.filter(p => isCandleClosed(p, timeframeMs, ctx.asOfCutoff))
       : [...ctx.inputs];
@@ -30,10 +31,16 @@ export const simpleReturn1h: FeatureDefinition<ReadonlyArray<RawDataPoint<{ clos
 
     if (sorted.length < 2) {
       return {
-        featureId: this.featureId, definitionVersion: this.definitionVersion,
-        status: 'INSUFFICIENT_INPUTS', value: null,
-        asOfCutoff: ctx.asOfCutoff, computedAt: now(), availabilityTime: null,
-        snapshotRef: ctx.snapshotRef, fusionPolicyVersion: ctx.policyVersion,
+        featureId: this.featureId,
+        definitionVersion: this.definitionVersion,
+        status: 'INSUFFICIENT_INPUTS',
+        value: null,
+        asOfCutoff: ctx.asOfCutoff,
+        computedAt: now(),
+        availabilityTime: null,
+        parameters: ctx.parameters ?? {},
+        snapshotRef: ctx.snapshotRef,
+        fusionPolicyVersion: ctx.policyVersion,
       };
     }
     const earliest = sorted[0]!;
@@ -48,12 +55,16 @@ export const simpleReturn1h: FeatureDefinition<ReadonlyArray<RawDataPoint<{ clos
     }
 
     return {
-      featureId: this.featureId, definitionVersion: this.definitionVersion,
+      featureId: this.featureId,
+      definitionVersion: this.definitionVersion,
       status: 'VALID',
       value: (latest.value.close - earliest.value.close) / earliest.value.close,
-      asOfCutoff: ctx.asOfCutoff, computedAt: now(),
+      asOfCutoff: ctx.asOfCutoff,
+      computedAt: now(),
       availabilityTime: latest.availabilityTime,
-      snapshotRef: ctx.snapshotRef, fusionPolicyVersion: ctx.policyVersion,
+      parameters: ctx.parameters ?? {},
+      snapshotRef: ctx.snapshotRef,
+      fusionPolicyVersion: ctx.policyVersion,
     };
   },
 };
