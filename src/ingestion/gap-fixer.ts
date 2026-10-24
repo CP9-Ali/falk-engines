@@ -1,6 +1,7 @@
 import type { RawDataPoint } from '../core/types';
 import type { Candle } from '../data-quality/checks/base';
 import type { ErrorQueue } from './error-queue';
+import { classifyGap, type GapType } from '../calendar/session-calendar';
 
 export interface Gap {
   readonly gap_id: string;
@@ -11,6 +12,13 @@ export interface Gap {
   readonly reason: string;
   readonly detected_at_utc: string;
   readonly status: 'PENDING' | 'FIXED' | 'ABANDONED';
+  /** Stage 5: classification of the gap (open vs closed market) */
+  readonly analysis?: {
+    readonly open_candles: number;
+    readonly closed_candles: number;
+    readonly needs_refetch: boolean;
+    readonly gap_type: GapType;
+  };
 }
 
 export interface GapFixResult {
@@ -23,10 +31,13 @@ export interface GapFixResult {
 export type Fetcher = (fromUtc: string, toUtc: string) => Promise<ReadonlyArray<RawDataPoint<Candle>>>;
 
 /**
- * §5.1: كاشف الفجوات — يعيد الجلب التلقائي عند اكتشاف نقص.
- * مصادر الفجوات:
- *   1. فحص completeness للشموع المحفوظة
- *   2. ErrorQueue (طلبات فاشلة لم تُحل)
+ * §5.1: Gap detector — automatically refetches missing candles.
+ * Gap sources:
+ *   1. Completeness checks on stored candles
+ *   2. ErrorQueue (failed requests that were not resolved)
+ *
+ * Stage 5: gaps that fall entirely within market-closed hours are marked
+ * ABANDONED (no refetch attempted) instead of PENDING.
  */
 export class GapFixer {
   constructor(
@@ -36,7 +47,7 @@ export class GapFixer {
     private readonly errors: ErrorQueue,
   ) {}
 
-  /** يكشف الفجوات في مصفوفة شموع مرتبة */
+  /** Detects gaps from an ordered candle array */
   detectFromPoints(points: ReadonlyArray<RawDataPoint<Candle>>): Gap[] {
     if (points.length < 2) return [];
     const sorted = [...points].sort((a, b) =>
@@ -48,22 +59,36 @@ export class GapFixer {
       const cur = new Date(sorted[i]!.eventTime).getTime();
       const gap = cur - prev;
       if (gap > this.expectedCadenceMs * 2) {
+        const fromUtc = new Date(prev + this.expectedCadenceMs).toISOString();
+        const toUtc = new Date(cur).toISOString();
+        const analysis = classifyGap(fromUtc, toUtc, this.expectedCadenceMs);
+        const needsRefetch = analysis.needs_refetch;
+        const status: 'PENDING' | 'ABANDONED' = needsRefetch ? 'PENDING' : 'ABANDONED';
+        const reason = needsRefetch
+          ? 'missing-candles'
+          : 'market-closed: ' + analysis.closed_candles + ' candles';
         out.push({
           gap_id: 'gap-' + this.timeframe + '-' + prev + '-' + cur,
           source_id: this.sourceId,
           timeframe: this.timeframe,
-          from_utc: new Date(prev + this.expectedCadenceMs).toISOString(),
-          to_utc: new Date(cur).toISOString(),
-          reason: 'missing-candles',
+          from_utc: fromUtc,
+          to_utc: toUtc,
+          reason,
           detected_at_utc: new Date().toISOString(),
-          status: 'PENDING',
+          status,
+          analysis: {
+            open_candles: analysis.open_candles,
+            closed_candles: analysis.closed_candles,
+            needs_refetch: analysis.needs_refetch,
+            gap_type: analysis.gap_type,
+          },
         });
       }
     }
     return out;
   }
 
-  /** يكشف الفجوات من ErrorQueue (طلبات فاشلة لم تُحل) */
+  /** Detects gaps from ErrorQueue (failed requests that were not resolved) */
   detectFromErrors(): Gap[] {
     const out: Gap[] = [];
     for (const op of this.errors.list()) {
@@ -83,8 +108,16 @@ export class GapFixer {
     return out;
   }
 
-  /** إعادة الجلب التلقائي عبر fetcher callback */
+  /** Refetches a single gap via a fetcher callback */
   async fix(gap: Gap, fetcher: Fetcher): Promise<GapFixResult> {
+    if (gap.status === 'ABANDONED') {
+      return {
+        gap,
+        success: false,
+        fetched_count: 0,
+        error: 'gap abandoned: market closed during entire gap',
+      };
+    }
     try {
       const points = await fetcher(gap.from_utc, gap.to_utc);
       const success = points.length > 0;
@@ -104,7 +137,7 @@ export class GapFixer {
     }
   }
 
-  /** إصلاح كل الفجوات دفعة واحدة */
+  /** Fixes all gaps in one batch */
   async fixAll(gaps: ReadonlyArray<Gap>, fetcher: Fetcher): Promise<GapFixResult[]> {
     const results: GapFixResult[] = [];
     for (const g of gaps) {
