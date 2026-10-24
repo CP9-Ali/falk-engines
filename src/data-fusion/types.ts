@@ -19,10 +19,13 @@ export interface SourceValue<T> {
   readonly availabilityTime: Timestamp;
   readonly sourceVersion: number;
   readonly qualityStatus: 'PASS' | 'PASS_WITH_WARNINGS' | 'FAIL';
+  /** Stage 8C: if true, source timezone is UNKNOWN — excluded from time-sensitive comparisons */
+  readonly timeBlocked?: boolean;
 }
 
 export type ConflictStatus =
-  | 'NONE' | 'RESOLVED_BY_TOLERANCE' | 'RESOLVED_BY_POLICY' | 'UNRESOLVED';
+  | 'NONE' | 'RESOLVED_BY_TOLERANCE' | 'RESOLVED_BY_POLICY' | 'UNRESOLVED'
+  | 'TIME_BLOCKED';
 
 export interface FusionResult<T> {
   readonly fusedValue: T | null;

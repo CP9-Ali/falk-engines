@@ -36,12 +36,45 @@ export class DataFusionEngine {
     streamKey: string = 'default',
   ): FusionResult<T> {
     const available = inputs.filter(s => isAtOrBefore(s.availabilityTime, asOfCutoff));
-    const usable = available.filter(s => s.qualityStatus !== 'FAIL');
-    const dropped = available
-      .filter(s => s.qualityStatus === 'FAIL')
-      .map(s => ({ sourceId: s.sourceId, reason: 'QUALITY_FAIL' as const }));
+    const timeBlocked = available.filter(s => s.timeBlocked === true);
+    const clean = available.filter(s => s.timeBlocked !== true);
+    const usable = clean.filter(s => s.qualityStatus !== 'FAIL');
+    const dropped = [
+      ...clean
+        .filter(s => s.qualityStatus === 'FAIL')
+        .map(s => ({ sourceId: s.sourceId, reason: 'QUALITY_FAIL' as const })),
+      ...timeBlocked.map(s => ({ sourceId: s.sourceId, reason: 'TIME_BLOCKED' as const })),
+    ];
 
     if (usable.length === 0) {
+      if (timeBlocked.length > 0) {
+        this.audit.append({
+          eventType: 'FUSION_TIME_BLOCKED',
+          engine: 'DataFusion',
+          eventTime: asOfCutoff,
+          recordTime: now(),
+          actor,
+          refs: { streamKey },
+          versions: {
+            schemaVersion: V.schemaVersion,
+            policyVersion: policy.policyVersion,
+            configVersion: V.configVersion,
+            engineVersion: this.engineVersion,
+          },
+          payload: {
+            blockedSources: timeBlocked.map(s => s.sourceId),
+            reason: 'all usable sources have UNKNOWN timezone',
+          },
+        });
+        return {
+          fusedValue: null,
+          conflictStatus: 'TIME_BLOCKED',
+          provenance: [],
+          droppedSources: dropped,
+          asOfCutoff,
+          policyVersion: policy.policyVersion,
+        };
+      }
       return {
         fusedValue: null,
         conflictStatus: 'UNRESOLVED',
