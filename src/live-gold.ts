@@ -308,7 +308,7 @@ async function main() {
           precisionCheck, volumeSemanticsCheck, timezoneCheck,  // ← Stage 2
           sessionGapCheck, volumeSanityCheck,                    // ← Stage 7
         ],
-        featureRegistry: reg, audit, auth,
+        enforceTimeBlocking: true, featureRegistry: reg, audit, auth,
       });
 
       const sma = result.features.get('sma_20_' + tfLabel);

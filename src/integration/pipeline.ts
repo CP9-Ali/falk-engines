@@ -12,6 +12,7 @@ import { Task } from '../orchestration/task';
 import { AuthorizationService, type Principal } from '../security/permissions';
 import { SchemaValidator } from '../contracts/schema-validator';
 import type { MetricsRegistry } from '../monitoring/metrics';
+import { SOURCE_TIMEZONE } from '../normalization/canonical';
 import { volumeSemanticsCheck } from '../data-quality/checks/volume-semantics';
 import { sessionGapCheck } from '../data-quality/checks/session-gap';
 export interface PipelineSource {
@@ -61,6 +62,8 @@ export function runPipeline(
     audit: AuditLog;
     auth: AuthorizationService;
     metrics?: MetricsRegistry;
+    /** Stage 8D: if true, block sources with unknown timezone (§7) */
+    enforceTimeBlocking?: boolean;
   },
 ): PipelineResult {
   const task = new Task(input.taskId, input.requestId, deps.audit, input.actor.principalId);
@@ -129,6 +132,9 @@ export function runPipeline(
           availabilityTime: last?.availabilityTime ?? input.asOfCutoff,
           sourceVersion: last?.version ?? 1,
           qualityStatus,
+          ...(deps.enforceTimeBlocking === true
+            ? { timeBlocked: !(s.sourceId in SOURCE_TIMEZONE) }
+            : {}),
         };
       }),
       input.fusionPolicy, input.asOfCutoff, actorId, 'pipeline',
