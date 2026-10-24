@@ -11,31 +11,40 @@ export interface CanonicalCandle {
   readonly source_symbol: string;
   readonly canonical_symbol: 'XAUUSD';
   readonly timeframe: CanonicalTimeframe;
-
   readonly event_time_utc: string;
   readonly source_timestamp: string;
   readonly source_timezone: string;
+  /** Stage 1: RESOLVED if timezone known, UNKNOWN otherwise */
+  readonly source_timezone_status: 'RESOLVED' | 'UNKNOWN';
+  /** Stage 1: true when source_timezone is UNKNOWN (blocks time-sensitive comparisons) */
+  readonly time_blocked: boolean;
   readonly arrival_time_utc: string;
   readonly availability_time_utc: string;
-
   readonly open: number;
   readonly high: number;
   readonly low: number;
   readonly close: number;
-
-  readonly volume_value: number;
+  readonly volume_value: number | null;
   readonly volume_semantics: VolumeSemantics;
-
   readonly raw_fingerprint: string;
   readonly lineage_id: string;
   readonly raw_payload_ref: string;
   readonly normalization_version: string;
   readonly processing_version: string;
-
   readonly decimal_places?: number;
   readonly tick_size?: number;
   readonly price_unit?: string;
   readonly volume_unit?: string;
+  /** §7: received_at_utc - when FALK received the record */
+  readonly received_at_utc?: string;
+  /** §7: processed_at_utc - when normalization completed */
+  readonly processed_at_utc?: string;
+  /** §7: candle_open_time_utc - explicit candle open */
+  readonly candle_open_time_utc?: string;
+  /** §7: candle_close_time_utc - explicit close (null if unknown) */
+  readonly candle_close_time_utc?: string | null;
+  /** §7 + §5.4: is_final - true if candle is closed, not updatable */
+  readonly is_final?: boolean;
 }
 
 export const VOLUME_SEMANTICS_BY_SOURCE: Record<string, VolumeSemantics> = {
@@ -84,11 +93,14 @@ export function toCanonical(
 ): CanonicalCandle {
   const volume_semantics = VOLUME_SEMANTICS_BY_SOURCE[raw.sourceId] ?? 'UNKNOWN';
   const source_symbol = SOURCE_SYMBOL_BY_SOURCE[raw.sourceId] ?? 'UNKNOWN';
-  const source_timezone = SOURCE_TIMEZONE[raw.sourceId] ?? 'UTC';
+  const tzLookup = SOURCE_TIMEZONE[raw.sourceId];
+  const source_timezone = tzLookup ?? 'UNKNOWN';
+  const source_timezone_status: 'RESOLVED' | 'UNKNOWN' = tzLookup ? 'RESOLVED' : 'UNKNOWN';
+  const time_blocked = source_timezone_status === 'UNKNOWN';
   const precision = PRECISION_BY_SOURCE[raw.sourceId];
   const units = resolveUnits(raw.sourceId);
   const rawVolume = raw.value.volume;
-  const volume_value = volume_semantics === 'UNKNOWN' ? 0 : rawVolume;
+  const volume_value = volume_semantics === 'UNKNOWN' ? null : rawVolume;
 
   return {
     source_id: raw.sourceId,
@@ -98,8 +110,15 @@ export function toCanonical(
     event_time_utc: raw.eventTime,
     source_timestamp: raw.eventTime,
     source_timezone,
+    source_timezone_status,
+    time_blocked,
     arrival_time_utc: raw.arrivalTime,
     availability_time_utc: raw.availabilityTime,
+    received_at_utc: raw.arrivalTime,
+    processed_at_utc: new Date().toISOString(),
+    candle_open_time_utc: raw.eventTime,
+    candle_close_time_utc: raw.closedAt ?? null,
+    is_final: raw.closedAt !== undefined,
     open: raw.value.open,
     high: raw.value.high,
     low: raw.value.low,
@@ -143,17 +162,20 @@ export function assessUsability(c: CanonicalCandle, opts?: { newsAvailable?: boo
     c.low <= Math.min(c.open, c.close);
   if (!ohlcValid) reasons.push('OHLC invalid');
 
-  const volOk = c.volume_semantics !== 'UNKNOWN' && c.volume_value > 0;
+  const volOk = c.volume_semantics !== 'UNKNOWN' && c.volume_value !== null && c.volume_value > 0;
   if (!volOk) reasons.push('volume semantics unknown or zero');
 
+  const timeOk = c.time_blocked !== true;
+  if (!timeOk) reasons.push('timezone UNKNOWN - time-sensitive comparisons blocked');
+  
   return {
     suitable_for: {
       rsi_atr: ohlcValid,
       volume_profile: ohlcValid && volOk,
-      source_comparison: ohlcValid,
+      source_comparison: ohlcValid && timeOk,
       delta_cvd: false,
       order_flow: false,
-      news_analysis: opts?.newsAvailable === true && opts?.newsPublishedAt !== undefined && opts?.eventTime !== undefined && new Date(opts.newsPublishedAt).getTime() <= new Date(opts.eventTime).getTime(),
+      news_analysis: timeOk && opts?.newsAvailable === true && opts?.newsPublishedAt !== undefined && opts?.eventTime !== undefined && new Date(opts.newsPublishedAt).getTime() <= new Date(opts.eventTime).getTime(),
     },
     reasons,
   };

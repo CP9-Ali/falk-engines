@@ -23,12 +23,13 @@ function computeUsageDecision(findings: ReadonlyArray<QualityFinding>): UsageDec
   const structuralOk = !hasCritical;
   const fullOk = !hasCritical && !hasHigh;
   const volumeIssue = findings.some(f => f.checkId.includes('MISSING') && f.message.toLowerCase().includes('volume'));
+  const volumeSemanticsIssue = findings.some(f => f.checkId.startsWith('DQ-VOLUME-SEMANTICS'));
   const timestampIssue = findings.some(f => f.category === 'FRESHNESS' && (f.severity === 'HIGH' || f.severity === 'CRITICAL'));
 
   return {
     rsi_atr: structuralOk,
     source_comparison: structuralOk && !timestampIssue,
-    volume_profile: fullOk && !volumeIssue,
+    volume_profile: fullOk && !volumeIssue && !volumeSemanticsIssue,
     delta_cvd: false,       // §6.4: OHLC insufficient
     order_flow: false,      // §6.4: no Level-2
     news_analysis: fullOk && !timestampIssue,

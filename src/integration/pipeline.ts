@@ -12,7 +12,9 @@ import { Task } from '../orchestration/task';
 import { AuthorizationService, type Principal } from '../security/permissions';
 import { SchemaValidator } from '../contracts/schema-validator';
 import type { MetricsRegistry } from '../monitoring/metrics';
-
+import { precisionCheck } from '../data-quality/checks/precision';
+import { volumeSemanticsCheck } from '../data-quality/checks/volume-semantics';
+import { timezoneCheck } from '../data-quality/checks/timezone';
 export interface PipelineSource {
   readonly sourceId: string;
   readonly points: ReadonlyArray<RawDataPoint<Candle>>;
