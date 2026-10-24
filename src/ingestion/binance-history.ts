@@ -39,6 +39,7 @@ export async function loadBinanceHistory(
         sourceId: 'binance-paxg',
         value: { open: o, high: h, low: l, close: c, volume: v },
         eventTime: new Date(openTime).toISOString(),
+        sourceTimestamp: String(openTime),
         closedAt: new Date(closeTime).toISOString(),
         arrivalTime: new Date().toISOString(),
         availabilityTime: new Date(closeTime).toISOString(),

@@ -58,6 +58,7 @@ export class BinanceLiveSource implements LiveSource {
               volume: parseFloat(k.v),
             },
             eventTime: new Date(k.t).toISOString(),
+            sourceTimestamp: String(k.t),
             closedAt: new Date(k.T + 1).toISOString(),
             arrivalTime: new Date().toISOString(),
             availabilityTime: new Date(k.T + 1).toISOString(),

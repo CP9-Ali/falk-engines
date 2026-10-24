@@ -84,7 +84,68 @@ export class DashboardServer {
       }
       res.json({ days, history });
     });
+    // Stage 10: /api/candles
+    this.app.get('/api/candles', (req, res) => {
+      const tf = String(req.query.timeframe || '1m');
+      const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 1000);
+      const candles: any[] = [];
+      for (const ev of this.candleHistory.values()) {
+        if (ev.type === 'candle' && ((ev as any).timeframe || '1m') === tf) {
+          candles.push(ev.data);
+        }
+      }
+      candles.sort((a: any, b: any) => new Date(a.eventTime).getTime() - new Date(b.eventTime).getTime());
+      res.json({ timeframe: tf, candles: candles.slice(-limit) });
+    });
 
+    // Stage 10: /api/stats
+    this.app.get('/api/stats', (_, res) => {
+      const byTf: Record<string, number> = {};
+      let minTs: string | null = null;
+      let maxTs: string | null = null;
+      for (const ev of this.candleHistory.values()) {
+        if (ev.type === 'candle') {
+          const tf = (ev as any).timeframe || '1m';
+          byTf[tf] = (byTf[tf] || 0) + 1;
+          const ts = (ev.data as any).eventTime;
+          if (ts) {
+            if (!minTs || ts < minTs) minTs = ts;
+            if (!maxTs || ts > maxTs) maxTs = ts;
+          }
+        }
+      }
+      res.json({
+        candles: this.candleHistory.size,
+        byTimeframe: byTf,
+        oldestCandle: minTs,
+        newestCandle: maxTs,
+        clients: this.clients.size,
+        session: classifySession(new Date().toISOString()),
+      });
+    });
+
+
+
+
+    // Stage 10.2: /api/candles/debug — inspect raw candle shape
+    this.app.get('/api/candles/debug', (_, res) => {
+      const out: any[] = [];
+      for (const ev of this.candleHistory.values()) {
+        if (out.length >= 3) break;
+        const d: any = ev.data;
+        out.push({
+          type: ev.type,
+          timeframe: (ev as any).timeframe,
+          dataType: typeof d,
+          dataKeys: d && typeof d === 'object' ? Object.keys(d) : null,
+          hasValue: !!(d && d.value),
+          hasEventTime: !!(d && (d.eventTime || d.event_time_utc)),
+          hasOpen: !!(d && (d.open != null || (d.value && d.value.open != null))),
+          sample: d,
+        });
+      }
+      res.json({ total: this.candleHistory.size, samples: out });
+    });
 
     this.wss.on('connection', (ws) => {
       this.clients.add(ws);
