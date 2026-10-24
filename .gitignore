@@ -68,3 +68,19 @@ backups/
 .backup/
 
 .backup-*/
+
+# Stage 13: temporary patch scripts
+patch-stage*.mjs
+fix-stage*.mjs
+inspect-*.mjs
+_*-ctx.txt
+_context.txt
+inspect-output.txt
+
+# Stage 13: backups and test artifacts
+_backups/
+.backup*/
+.backup-gap-test/
+.backup/raw/
+test-results/
+coverage/

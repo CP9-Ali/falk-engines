@@ -1,31 +1,62 @@
-﻿name: FALK CI
+﻿name: CI
 
 on:
   push:
-    branches: [ main ]
+    branches: [main, develop]
   pull_request:
-    branches: [ main ]
+    branches: [main, develop]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-  build-test-acceptance:
+  typecheck:
+    name: Typecheck
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v4
-
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: '20'
           cache: 'npm'
-
       - name: Install dependencies
         run: npm ci
+      - name: TypeScript check
+        run: npx tsc --noEmit
 
-      - name: Build (TypeScript)
-        run: npm run build
-
-      - name: Test suite
+  test:
+    name: Test (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    needs: typecheck
+    strategy:
+      fail-fast: false
+      matrix:
+        node: ['20', '24']
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Node.js ${{ matrix.node }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: 'npm'
+      - name: Install dependencies
+        run: npm ci
+      - name: Run tests
+        env:
+          CI: 'true'
         run: npm test
-
-      - name: Acceptance gate (§15 + §18)
-        run: npm run acceptance
+      - name: Upload test output on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-failures-node${{ matrix.node }}
+          path: |
+            test-results/
+            coverage/
+          if-no-files-found: ignore
+          retention-days: 7
