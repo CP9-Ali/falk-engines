@@ -5,11 +5,47 @@ import type { Candle } from '../data-quality/checks/base';
 
 export type VolumeSemantics = 'TICK' | 'REAL' | 'CONTRACT' | 'UNKNOWN';
 export type CanonicalTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w';
+export type InstrumentType = 'SPOT' | 'CFD' | 'FUTURE' | 'CRYPTO' | 'INDEX' | 'AGGREGATED' | 'UNKNOWN';
+
+export interface SourceMetadata {
+  readonly instrument_type: InstrumentType;
+  readonly price_source: string;
+  readonly quote_currency: string;
+  readonly base_currency: string;
+}
+
+/**
+ * Stage 8A (§7.1): per-source instrument metadata.
+ * Similar symbol names do NOT prove identical instruments.
+ */
+export const SOURCE_METADATA: Record<string, SourceMetadata> = {
+  'twelvedata-ws': { instrument_type: 'SPOT',       price_source: 'FX:TWELVEDATA', quote_currency: 'USD',     base_currency: 'XAU' },
+  'binance-paxg':  { instrument_type: 'CRYPTO',     price_source: 'CEX:BINANCE',   quote_currency: 'USDT',    base_currency: 'PAXG' },
+  'fcsapi-xau':    { instrument_type: 'SPOT',       price_source: 'FX:FCSAPI',     quote_currency: 'USD',     base_currency: 'XAU' },
+  'xaus-api':      { instrument_type: 'UNKNOWN',    price_source: 'UNKNOWN:xaus-api', quote_currency: 'UNKNOWN', base_currency: 'XAU' },
+  'h3-aggregated': { instrument_type: 'AGGREGATED', price_source: 'AGG:h3',        quote_currency: 'USD',     base_currency: 'XAU' },
+};
+
+const UNKNOWN_METADATA: SourceMetadata = {
+  instrument_type: 'UNKNOWN',
+  price_source: 'UNKNOWN',
+  quote_currency: 'UNKNOWN',
+  base_currency: 'UNKNOWN',
+};
+
+export function getSourceMetadata(sourceId: string): SourceMetadata {
+  return SOURCE_METADATA[sourceId] ?? UNKNOWN_METADATA;
+}
+
 
 export interface CanonicalCandle {
   readonly source_id: string;
   readonly source_symbol: string;
   readonly canonical_symbol: 'XAUUSD';
+  readonly instrument_type: InstrumentType;
+  readonly price_source: string;
+  readonly quote_currency: string;
+  readonly base_currency: string;
   readonly timeframe: CanonicalTimeframe;
   readonly event_time_utc: string;
   readonly source_timestamp: string;
@@ -93,6 +129,7 @@ export function toCanonical(
 ): CanonicalCandle {
   const volume_semantics = VOLUME_SEMANTICS_BY_SOURCE[raw.sourceId] ?? 'UNKNOWN';
   const source_symbol = SOURCE_SYMBOL_BY_SOURCE[raw.sourceId] ?? 'UNKNOWN';
+  const meta = getSourceMetadata(raw.sourceId);
   const tzLookup = SOURCE_TIMEZONE[raw.sourceId];
   const source_timezone = tzLookup ?? 'UNKNOWN';
   const source_timezone_status: 'RESOLVED' | 'UNKNOWN' = tzLookup ? 'RESOLVED' : 'UNKNOWN';
@@ -106,6 +143,10 @@ export function toCanonical(
     source_id: raw.sourceId,
     source_symbol,
     canonical_symbol: 'XAUUSD',
+    instrument_type: meta.instrument_type,
+    price_source: meta.price_source,
+    quote_currency: meta.quote_currency,
+    base_currency: meta.base_currency,
     timeframe,
     event_time_utc: raw.eventTime,
     source_timestamp: raw.eventTime,
@@ -179,4 +220,14 @@ export function assessUsability(c: CanonicalCandle, opts?: { newsAvailable?: boo
     },
     reasons,
   };
+}
+
+/** Stage 8A (§7.1): true only if two candles refer to the same tradable instrument. */
+export function areInstrumentsEquivalent(
+  a: Pick<CanonicalCandle, 'canonical_symbol' | 'instrument_type' | 'price_source'>,
+  b: Pick<CanonicalCandle, 'canonical_symbol' | 'instrument_type' | 'price_source'>,
+): boolean {
+  return a.canonical_symbol === b.canonical_symbol
+    && a.instrument_type === b.instrument_type
+    && a.price_source === b.price_source;
 }
