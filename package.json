@@ -15,7 +15,8 @@
     "replay": "tsx src/replay-cli.ts",
     "health": "powershell -ExecutionPolicy Bypass -File scripts/health-check.ps1",
     "acceptance": "tsx src/acceptance-cli.ts",
-    "replay-compare": "tsx src/replay-compare.ts"
+    "replay-compare": "tsx src/replay-compare.ts",
+    "backtest": "npx tsx src/backtest/cli-entry.ts"
   },
   "devDependencies": {
     "@types/express": "^4.17.25",
