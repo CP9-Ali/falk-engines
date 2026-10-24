@@ -2,16 +2,24 @@ import type { FusionResult, FusionStatus, FusedDelta, FusedRawValue } from './ty
 import { computePairwiseDeltas } from './price-difference';
 import { detectOutliersMAD } from './outlier-detector';
 import { groupSourcesByIndependence, resolveIndependenceKey } from './independence';
+import { alignByTimeBucket, type TimestampedValue } from './timestamp-aligner';
+import { compareQuotes, type QuoteComparatorResult } from './quote-comparator';
+import { literalInstrumentMatcher, type InstrumentMatcher } from './instrument-matcher';
 import { resolveStatus } from './engine';
 
 export interface SourceValueLike<T> {
   sourceId: string;
   value: T;
   timeBlocked?: boolean;
-  /** ?8.4B ? instrument identity (e.g. 'XAUUSD.spot'). Optional. */
   instrument?: string;
-  /** ?8.4E ? lineage id from CanonicalCandle. Optional. */
   lineageId?: string;
+  /** ?8.5E ? raw payload reference from CanonicalCandle. */
+  raw_payload_ref?: string;
+  /** ?8.5A ? event time (ISO 8601 UTC) for alignment. */
+  timestamp?: string;
+  /** ?8.5F ? bid/ask when available. */
+  bid?: number;
+  ask?: number;
 }
 
 export interface EnrichOptions<T> {
@@ -22,12 +30,15 @@ export interface EnrichOptions<T> {
   fieldAccessor?: (v: T) => number | null;
   outlierPolicy?: { method: 'MAD' | 'ZSCORE'; threshold: number };
   independenceKeys?: Readonly<Record<string, string>>;
-  /** ?8.4A ? list of eligible source IDs per field. Field missing ? all eligible. */
   eligibilityByField?: Readonly<Record<string, ReadonlyArray<string>>>;
-  /** ?8.4B ? expected instrument for this enrichment. Missing ? skip instrument filter. */
   referenceInstrument?: string;
-  /** ?8.4C ? priority order per field. Missing ? prefer USED, else first-in-group. */
   priorityByField?: Readonly<Record<string, ReadonlyArray<string>>>;
+  /** ?8.5A ? bucket size in ms; sources in different buckets are dropped. */
+  alignmentBucketMs?: number;
+  /** ?8.5B ? override the instrument matcher (e.g. semantic). */
+  instrumentMatcher?: InstrumentMatcher;
+  /** ?8.5C ? skip comparison entirely; status becomes SKIPPED. */
+  skipComparison?: boolean;
 }
 
 export interface SourceCounts {
@@ -36,6 +47,8 @@ export interface SourceCounts {
   blocked: number;
   dropped_by_policy: number;
   independent_evidence: number;
+  /** ?8.5A ? sources excluded due to timestamp misalignment. */
+  timestamp_misaligned?: number;
 }
 
 export interface FusionReportAddon {
@@ -46,8 +59,9 @@ export interface FusionReportAddon {
   deltas: ReadonlyArray<FusedDelta>;
   raw_values: ReadonlyArray<FusedRawValue>;
   source_counts: SourceCounts;
-  /** ?8.4D ? true when caller must avoid sensitive uses (conflict exceeded / insufficient / failed). */
   sensitive_use_blocked: boolean;
+  /** ?8.5F ? quote comparator result when bid/ask data present. */
+  quote_comparisons?: QuoteComparatorResult;
 }
 
 export type EnrichedFusionResult<T> = FusionResult<T> & FusionReportAddon;
@@ -72,12 +86,13 @@ function isEligible(
 }
 
 function isInstrumentMatch(
+  matcher: InstrumentMatcher,
   sourceInstrument: string | undefined,
   referenceInstrument: string | undefined,
 ): boolean {
   if (referenceInstrument === undefined) return true;
-  if (sourceInstrument === undefined) return true;   // no info ? pass (backward compat)
-  return sourceInstrument === referenceInstrument;
+  if (sourceInstrument === undefined) return true;
+  return matcher(sourceInstrument, referenceInstrument);
 }
 
 function isSensitiveBlocked(status: FusionStatus): boolean {
@@ -96,6 +111,7 @@ export function enrichFusionResult<T>(
   const independenceKeys = opts.independenceKeys ?? {};
   const eligibilityByField = opts.eligibilityByField ?? {};
   const priorityByField = opts.priorityByField ?? {};
+  const matcher = opts.instrumentMatcher ?? literalInstrumentMatcher;
 
   const anyResult = result as unknown as {
     droppedSources: ReadonlyArray<{ sourceId: string; reason: string }>;
@@ -106,7 +122,7 @@ export function enrichFusionResult<T>(
   const droppedIds = new Set(anyResult.droppedSources.map((d) => d.sourceId));
   const provenanceIds = new Set(anyResult.provenance.map((p) => p.sourceId));
 
-  // ?? [1] Base raw values ????????????????????????????????????????
+  // [1] Build base raw_values
   let rawValues: FusedRawValue[] = values.map((v) => {
     const price = accessor(v.value);
     const blocked = v.timeBlocked === true;
@@ -135,51 +151,94 @@ export function enrichFusionResult<T>(
       status,
       reason,
       ...(v.lineageId !== undefined ? { lineage_id: v.lineageId } : {}),
+      ...(v.raw_payload_ref !== undefined ? { raw_payload_ref: v.raw_payload_ref } : {}),
       source_independence_key: resolveIndependenceKey(v.sourceId, independenceKeys),
     };
   });
 
-  // ?? [2] ?8.4A eligibility filter ???????????????????????????????
+  // [2] Eligibility filter
   rawValues = rawValues.map((r) => {
-    if (r.status === 'BLOCKED') return r;
-    if (r.status === 'DROPPED') return r;   // keep fuse's reason
+    if (r.status === 'BLOCKED' || r.status === 'DROPPED') return r;
     if (!isEligible(r.sourceId, fieldName, eligibilityByField)) {
       return { ...r, status: 'DROPPED' as const, reason: 'NOT_ELIGIBLE_FOR_FIELD' };
     }
     return r;
   });
 
-  // ?? [3] ?8.4B instrument filter ????????????????????????????????
+  // [3] Instrument filter
   if (opts.referenceInstrument !== undefined) {
     const instrumentBySource = new Map<string, string | undefined>();
     for (const v of values) instrumentBySource.set(v.sourceId, v.instrument);
     rawValues = rawValues.map((r) => {
-      if (r.status === 'BLOCKED') return r;
-      if (r.status === 'DROPPED') return r;
+      if (r.status === 'BLOCKED' || r.status === 'DROPPED') return r;
       const ins = instrumentBySource.get(r.sourceId);
-      if (!isInstrumentMatch(ins, opts.referenceInstrument)) {
+      if (!isInstrumentMatch(matcher, ins, opts.referenceInstrument)) {
         return { ...r, status: 'DROPPED' as const, reason: 'INSTRUMENT_MISMATCH' };
       }
       return r;
     });
   }
 
-  // ?? [4] outlier detection ??????????????????????????????????????
-  const outlierIds = new Set<string>();
-  if (opts.outlierPolicy?.method === 'MAD') {
-    const candidates = rawValues
-      .filter((r) => r.value !== null && r.status !== 'BLOCKED' && r.status !== 'DROPPED')
-      .map((r) => ({ sourceId: r.sourceId, value: r.value as number }));
-    const det = detectOutliersMAD(candidates, opts.outlierPolicy.threshold);
-    for (const o of det.outliers) outlierIds.add(o.sourceId);
+  // [4] ?8.5A ? timestamp alignment
+  let failureReason: string | null = null;
+  let timestamp_misaligned = 0;
+  if (opts.alignmentBucketMs !== undefined && opts.skipComparison !== true) {
+    try {
+      const usableWithTs: TimestampedValue<number>[] = [];
+      const tsBySource = new Map<string, string>();
+      for (const v of values) {
+        if (v.timestamp !== undefined) tsBySource.set(v.sourceId, v.timestamp);
+      }
+      for (const r of rawValues) {
+        if (r.status !== 'USED' && r.status !== 'NOT_COMPARABLE') continue;
+        if (r.value === null) continue;
+        const ts = tsBySource.get(r.sourceId);
+        if (ts === undefined) continue;
+        usableWithTs.push({ sourceId: r.sourceId, timestamp: ts, value: r.value });
+      }
+      if (usableWithTs.length >= 2) {
+        const buckets = alignByTimeBucket(usableWithTs, opts.alignmentBucketMs);
+        if (buckets.length > 1) {
+          let modalIdx = 0;
+          for (let i = 1; i < buckets.length; i++) {
+            if (buckets[i]!.entries.length > buckets[modalIdx]!.entries.length) modalIdx = i;
+          }
+          const modalIds = new Set(buckets[modalIdx]!.entries.map((e) => e.sourceId));
+          rawValues = rawValues.map((r) => {
+            if (r.status !== 'USED' && r.status !== 'NOT_COMPARABLE') return r;
+            if (!usableWithTs.some((u) => u.sourceId === r.sourceId)) return r;
+            if (modalIds.has(r.sourceId)) return r;
+            timestamp_misaligned += 1;
+            return { ...r, status: 'DROPPED' as const, reason: 'TIMESTAMP_MISALIGNED' };
+          });
+        }
+      }
+    } catch (err) {
+      failureReason = 'ALIGNMENT_FAILED: ' + (err instanceof Error ? err.message : String(err));
+    }
   }
-  rawValues = rawValues.map((r) =>
-    outlierIds.has(r.sourceId) && r.status !== 'BLOCKED' && r.status !== 'DROPPED'
-      ? { ...r, status: 'DROPPED' as const, reason: 'OUTLIER_MAD_GT_THRESHOLD' }
-      : r,
-  );
 
-  // ?? [5] independence grouping ??????????????????????????????????
+  // [5] Outliers
+  if (opts.outlierPolicy?.method === 'MAD' && opts.skipComparison !== true && failureReason === null) {
+    try {
+      const candidates = rawValues
+        .filter((r) => r.value !== null && r.status !== 'BLOCKED' && r.status !== 'DROPPED')
+        .map((r) => ({ sourceId: r.sourceId, value: r.value as number }));
+      const det = detectOutliersMAD(candidates, opts.outlierPolicy.threshold);
+      const outlierIds = new Set(det.outliers.map((o) => o.sourceId));
+      rawValues = rawValues.map((r) =>
+        outlierIds.has(r.sourceId) && r.status !== 'BLOCKED' && r.status !== 'DROPPED'
+          ? { ...r, status: 'DROPPED' as const, reason: 'OUTLIER_MAD_GT_THRESHOLD' }
+          : r,
+      );
+    } catch (err) {
+      if (failureReason === null) {
+        failureReason = 'OUTLIER_FAILED: ' + (err instanceof Error ? err.message : String(err));
+      }
+    }
+  }
+
+  // [6] Independence grouping (always computed for reporting)
   const usable = rawValues.filter(
     (r) => (r.status === 'USED' || r.status === 'NOT_COMPARABLE') && r.value !== null,
   );
@@ -189,28 +248,59 @@ export function enrichFusionResult<T>(
   );
   const independent_evidence = groups.length;
 
-  // ?? [6] ?8.4C priority-aware representatives ???????????????????
-  const priority = priorityByField[fieldName] ?? [];
-  const priorityIndex = new Map<string, number>();
-  priority.forEach((sid, i) => priorityIndex.set(sid, i));
+  // [7] ?8.5C ? priority-aware representatives + deltas
+  let representatives: Array<{ sourceId: string; price: number }> = [];
+  let deltas: FusedDelta[] = [];
+  if (opts.skipComparison !== true && failureReason === null) {
+    try {
+      const priority = priorityByField[fieldName] ?? [];
+      const priorityIndex = new Map<string, number>();
+      priority.forEach((sid, i) => priorityIndex.set(sid, i));
 
-  const priceBySource = new Map<string, number>();
-  for (const r of usable) priceBySource.set(r.sourceId, r.value as number);
+      const priceBySource = new Map<string, number>();
+      for (const r of usable) priceBySource.set(r.sourceId, r.value as number);
 
-  const representatives: Array<{ sourceId: string; price: number }> = [];
-  for (const g of groups) {
-    const usedInGroup = g.sourceIds.find((s) => provenanceIds.has(s));
-    const prioritized = g.sourceIds
-      .filter((s) => priorityIndex.has(s))
-      .sort((a, b) => priorityIndex.get(a)! - priorityIndex.get(b)!);
-    const repId = usedInGroup ?? prioritized[0] ?? g.sourceIds[0]!;
-    const p = priceBySource.get(repId);
-    if (typeof p === 'number') representatives.push({ sourceId: repId, price: p });
+      for (const g of groups) {
+        const usedInGroup = g.sourceIds.find((s) => provenanceIds.has(s));
+        const prioritized = g.sourceIds
+          .filter((s) => priorityIndex.has(s))
+          .sort((a, b) => priorityIndex.get(a)! - priorityIndex.get(b)!);
+        const repId = usedInGroup ?? prioritized[0] ?? g.sourceIds[0]!;
+        const p = priceBySource.get(repId);
+        if (typeof p === 'number') representatives.push({ sourceId: repId, price: p });
+      }
+
+      // ?8.5 fix ? order representatives by priority before emitting deltas.
+      representatives.sort((a, b) => {
+        const ia = priorityIndex.get(a.sourceId);
+        const ib = priorityIndex.get(b.sourceId);
+        if (ia !== undefined && ib !== undefined) return ia - ib;
+        if (ia !== undefined) return -1;
+        if (ib !== undefined) return 1;
+        return 0;
+      });
+
+      deltas = representatives.length >= 2 ? computePairwiseDeltas(representatives) : [];
+    } catch (err) {
+      failureReason = 'DELTAS_FAILED: ' + (err instanceof Error ? err.message : String(err));
+      deltas = [];
+    }
   }
 
-  const deltas: FusedDelta[] =
-    representatives.length >= 2 ? computePairwiseDeltas(representatives) : [];
+  // [8] ?8.5F ? quote comparison
+  let quote_comparisons: QuoteComparatorResult | undefined = undefined;
+  if (opts.skipComparison !== true && failureReason === null) {
+    try {
+      const quotes = values
+        .filter((v) => typeof v.bid === 'number' && typeof v.ask === 'number')
+        .map((v) => ({ sourceId: v.sourceId, bid: v.bid as number, ask: v.ask as number }));
+      if (quotes.length > 0) quote_comparisons = compareQuotes(quotes);
+    } catch (err) {
+      failureReason = 'QUOTES_FAILED: ' + (err instanceof Error ? err.message : String(err));
+    }
+  }
 
+  // [9] withinTolerance
   const withinTolerance: boolean | null =
     deltas.length === 0
       ? null
@@ -220,22 +310,31 @@ export function enrichFusionResult<T>(
           return (Math.abs(d.delta_p) / Math.abs(base)) * 10_000 <= policy.toleranceBps;
         });
 
+  // [10] Compute counts
   const comparable = rawValues.filter(
     (r) => r.status === 'USED' || r.status === 'NOT_COMPARABLE',
   ).length;
   const blocked = rawValues.filter((r) => r.status === 'BLOCKED').length;
   const dropped_by_policy = rawValues.filter((r) => r.status === 'DROPPED').length;
 
-  const status: FusionStatus = resolveStatus({
-    total: rawValues.length,
-    comparable: independent_evidence,
-    blocked,
-    droppedByPolicy: dropped_by_policy,
-    withinTolerance,
-    policyResolved: anyResult.fusedValue !== null && anyResult.fusedValue !== undefined,
-    policyFailed: false,
-    comparisonSkipped: false,
-  });
+  // [11] Status
+  let status: FusionStatus;
+  if (opts.skipComparison === true) {
+    status = 'SKIPPED';
+  } else if (failureReason !== null) {
+    status = 'FAILED';
+  } else {
+    status = resolveStatus({
+      total: rawValues.length,
+      comparable: independent_evidence,
+      blocked,
+      droppedByPolicy: dropped_by_policy,
+      withinTolerance,
+      policyResolved: anyResult.fusedValue !== null && anyResult.fusedValue !== undefined,
+      policyFailed: false,
+      comparisonSkipped: false,
+    });
+  }
 
   return {
     ...result,
@@ -252,7 +351,9 @@ export function enrichFusionResult<T>(
       blocked,
       dropped_by_policy,
       independent_evidence,
+      timestamp_misaligned,
     },
     sensitive_use_blocked: isSensitiveBlocked(status),
+    ...(quote_comparisons !== undefined ? { quote_comparisons } : {}),
   };
 }

@@ -61,6 +61,7 @@ export interface FusedRawValue {
   reason: string;
   lineage_id?: string;
   source_independence_key?: string;
+  raw_payload_ref?: string;
 }
 export interface FusedDelta {
   from: string;
