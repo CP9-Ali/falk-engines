@@ -7,7 +7,6 @@ import { FeatureRegistry } from './feature-engineering/registry';
 import { makeSma20, makeRsi14, makeAtr14 } from './feature-engineering/financial';
 import { sessionGapCheck } from './data-quality/checks/session-gap';
 import { volumeSanityCheck } from './data-quality/checks/volume-sanity';
-// + إذا لم تكن موجودة:
 import { precisionCheck } from './data-quality/checks/precision';
 import { volumeSemanticsCheck } from './data-quality/checks/volume-semantics';
 import { timezoneCheck } from './data-quality/checks/timezone';
