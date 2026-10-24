@@ -25,14 +25,14 @@ describe('DataFusionEngine', () => {
     const r = new DataFusionEngine(new HashChainAuditLog(), '1.0').fuse(
       [base('A', 100), base('B', 200)], mk(), T, 'test');
     expect(r.fusedValue?.close).toBe(100);
-    expect(r.conflictStatus).toBe('RESOLVED_BY_POLICY');
+    expect(r.conflictStatus).toBe('CONSISTENT');
   });
 
   it('REJECT_ON_CONFLICT returns null on unresolved conflict', () => {
     const r = new DataFusionEngine(new HashChainAuditLog(), '1.0').fuse(
       [base('A', 100), base('B', 200)], mk({ conflictStrategy: 'REJECT_ON_CONFLICT' }), T, 'test');
     expect(r.fusedValue).toBeNull();
-    expect(r.conflictStatus).toBe('UNRESOLVED');
+    expect(r.conflictStatus).toBe('UNRESOLVED_CONFLICT');
   });
 
   it('excludes points not available at cutoff', () => {

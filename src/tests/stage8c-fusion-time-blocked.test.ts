@@ -30,7 +30,7 @@ describe('Stage 8C — fusion blocks timeBlocked sources', () => {
     const engine = new DataFusionEngine(new HashChainAuditLog(), '1.0');
     const r = engine.fuse([mk('A', 100, true)], policy, CUTOFF, 'test');
     expect(r.fusedValue).toBeNull();
-    expect(r.conflictStatus).toBe('TIME_BLOCKED');
+    expect(r.conflictStatus).toBe('INSUFFICIENT_COMPARABLE_DATA');
     expect(r.droppedSources).toHaveLength(1);
     expect(r.droppedSources[0]!.reason).toBe('TIME_BLOCKED');
   });
@@ -39,7 +39,7 @@ describe('Stage 8C — fusion blocks timeBlocked sources', () => {
     const engine = new DataFusionEngine(new HashChainAuditLog(), '1.0');
     const r = engine.fuse([mk('A', 100, true), mk('B', 101, true)], policy, CUTOFF, 'test');
     expect(r.fusedValue).toBeNull();
-    expect(r.conflictStatus).toBe('TIME_BLOCKED');
+    expect(r.conflictStatus).toBe('INSUFFICIENT_COMPARABLE_DATA');
     expect(r.droppedSources).toHaveLength(2);
     expect(r.droppedSources.every(d => d.reason === 'TIME_BLOCKED')).toBe(true);
   });
@@ -59,7 +59,7 @@ describe('Stage 8C — fusion blocks timeBlocked sources', () => {
     const r = engine.fuse([mk('A', 100), mk('B', 101)], policy, CUTOFF, 'test');
     expect(r.fusedValue).not.toBeNull();
     expect(r.droppedSources).toHaveLength(0);
-    expect(r.conflictStatus).not.toBe('TIME_BLOCKED');
+    expect(r.conflictStatus).not.toBe('INSUFFICIENT_COMPARABLE_DATA');
   });
 
   it('timeBlocked false → behaves as not blocked', () => {
@@ -82,6 +82,6 @@ describe('Stage 8C — fusion blocks timeBlocked sources', () => {
     const failInput = { ...mk('A', 100), qualityStatus: 'FAIL' as const };
     const r = engine.fuse([failInput], policy, CUTOFF, 'test');
     expect(r.fusedValue).toBeNull();
-    expect(r.conflictStatus).toBe('UNRESOLVED');
+    expect(r.conflictStatus).toBe('UNRESOLVED_CONFLICT');
   });
 });

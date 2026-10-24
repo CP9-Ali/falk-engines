@@ -54,7 +54,7 @@ export function scenario2_trueJump(): ScenarioResult {
       { sourceId: 'tertiary',  value: { close: 119.9 }, eventTime: t, availabilityTime: t, sourceVersion: 1, qualityStatus: 'PASS' },
     ], policy, t, ACTOR,
   );
-  const passed = r.fusedValue?.close === 120 && r.conflictStatus !== 'UNRESOLVED';
+  const passed = r.fusedValue?.close === 120 && r.conflictStatus !== 'UNRESOLVED_CONFLICT';
   return { name: '2. true price jump', passed, details: `fused=${r.fusedValue?.close}` };
 }
 

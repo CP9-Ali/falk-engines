@@ -68,7 +68,7 @@ export class DataFusionEngine {
         });
         return {
           fusedValue: null,
-          conflictStatus: 'TIME_BLOCKED',
+          conflictStatus: 'INSUFFICIENT_COMPARABLE_DATA',
           provenance: [],
           droppedSources: dropped,
           asOfCutoff,
@@ -77,7 +77,7 @@ export class DataFusionEngine {
       }
       return {
         fusedValue: null,
-        conflictStatus: 'UNRESOLVED',
+        conflictStatus: 'UNRESOLVED_CONFLICT',
         provenance: [],
         droppedSources: dropped,
         asOfCutoff,
@@ -127,7 +127,7 @@ export class DataFusionEngine {
     const max = Math.max(...closes);
     const spreadBps = min > 0 ? ((max - min) / min) * 10_000 : 0;
 
-    let conflictStatus: FusionResult<T>['conflictStatus'] = 'NONE';
+    let conflictStatus: FusionResult<T>['conflictStatus'] = 'CONSISTENT';
     let fusedValue: T | null = null;
     let provenance: FusionResult<T>['provenance'] = [];
 
@@ -136,7 +136,7 @@ export class DataFusionEngine {
       provenance = [{ sourceId: chosen.sourceId, value: chosen.value, weight: 1 }];
     } else if (spreadBps <= policy.toleranceBps) {
       fusedValue = chosen.value;
-      conflictStatus = 'RESOLVED_BY_TOLERANCE';
+      conflictStatus = 'CONSISTENT';
       provenance = prioritized.map(s => ({
         sourceId: s.sourceId,
         value: s.value,
@@ -146,7 +146,7 @@ export class DataFusionEngine {
       switch (policy.conflictStrategy) {
         case 'STRICT_PRIORITY':
           fusedValue = chosen.value;
-          conflictStatus = 'RESOLVED_BY_POLICY';
+          conflictStatus = 'CONSISTENT';
           provenance = prioritized.map(s => ({
             sourceId: s.sourceId,
             value: s.value,
@@ -157,7 +157,7 @@ export class DataFusionEngine {
           const sorted = [...prioritized].sort((a, b) => a.value.close - b.value.close);
           const med = sorted[Math.floor(sorted.length / 2)]!;
           fusedValue = med.value;
-          conflictStatus = 'RESOLVED_BY_POLICY';
+          conflictStatus = 'CONSISTENT';
           provenance = prioritized.map(s => ({
             sourceId: s.sourceId,
             value: s.value,
@@ -167,7 +167,7 @@ export class DataFusionEngine {
         }
         case 'REJECT_ON_CONFLICT':
           fusedValue = null;
-          conflictStatus = 'UNRESOLVED';
+          conflictStatus = 'UNRESOLVED_CONFLICT';
           provenance = prioritized.map(s => ({
             sourceId: s.sourceId,
             value: s.value,
@@ -232,4 +232,28 @@ export class DataFusionEngine {
       created_at_utc: new Date().toISOString(),
     };
   }
+}
+
+// -- ?8.0 ? status resolver -------------------------------------
+export interface StatusInputs {
+  total: number;
+  comparable: number;
+  blocked: number;
+  droppedByPolicy: number;
+  withinTolerance: boolean | null;
+  policyResolved: boolean;
+  policyFailed: boolean;
+  comparisonSkipped: boolean;
+}
+
+export function resolveStatus(i: StatusInputs): import('./types').FusionStatus {
+  if (i.comparisonSkipped) return 'SKIPPED';
+  if (i.total === 0) return 'SKIPPED';
+  if (i.blocked === i.total) return 'INSUFFICIENT_COMPARABLE_DATA';
+  if (i.comparable < 2) return 'INSUFFICIENT_COMPARABLE_DATA';
+  if (i.policyFailed) return 'UNRESOLVED_CONFLICT';
+  if (i.withinTolerance === true) return 'CONSISTENT';
+  if (i.withinTolerance === false && i.policyResolved) return 'DISCREPANCY';
+  if (i.withinTolerance === false) return 'UNRESOLVED_CONFLICT';
+  return 'FAILED';
 }
