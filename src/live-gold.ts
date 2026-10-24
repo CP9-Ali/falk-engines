@@ -5,6 +5,12 @@ import { DataFusionEngine } from './data-fusion/engine';
 import { ConflictLog } from './data-fusion/conflict-record';
 import { FeatureRegistry } from './feature-engineering/registry';
 import { makeSma20, makeRsi14, makeAtr14 } from './feature-engineering/financial';
+import { sessionGapCheck } from './data-quality/checks/session-gap';
+import { volumeSanityCheck } from './data-quality/checks/volume-sanity';
+// + إذا لم تكن موجودة:
+import { precisionCheck } from './data-quality/checks/precision';
+import { volumeSemanticsCheck } from './data-quality/checks/volume-semantics';
+import { timezoneCheck } from './data-quality/checks/timezone';
 import { structuralCheck } from './data-quality/checks/structural';
 import { completenessCheck } from './data-quality/checks/completeness';
 import { schemaCheck } from './data-quality/checks/schema';
@@ -296,7 +302,15 @@ async function main() {
           ['rsi_14_' + tfLabel, hist],
           ['atr_14_' + tfLabel, hist],
         ]),
-      }, { qualityChecks: [structuralCheck, completenessCheck, schemaCheck, duplicateCheck, crossFieldCheck, missingCheck, timestampCheck], featureRegistry: reg, audit, auth });
+      }, {
+        qualityChecks: [
+          structuralCheck, completenessCheck, schemaCheck,
+          duplicateCheck, crossFieldCheck, missingCheck, timestampCheck,
+          precisionCheck, volumeSemanticsCheck, timezoneCheck,  // ← Stage 2
+          sessionGapCheck, volumeSanityCheck,                    // ← Stage 7
+        ],
+        featureRegistry: reg, audit, auth,
+      });
 
       const sma = result.features.get('sma_20_' + tfLabel);
       const rsi = result.features.get('rsi_14_' + tfLabel);
