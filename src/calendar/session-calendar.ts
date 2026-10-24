@@ -227,3 +227,120 @@ function spansUtcWeekend(fromMs: number, toMs: number): boolean {
   }
   return false;
 }
+
+
+// =====================================================================
+// Stage 6: Session bounds (forex-open window)
+// =====================================================================
+
+export interface SessionBounds {
+  /** Current session name (may be 'CLOSED' even during the forex week). */
+  readonly session: SessionName;
+  /** Forex 24/5 open flag — same as classifySession().is_market_open. */
+  readonly is_market_open: boolean;
+  /** Start of the current forex-open window (or next open, if currently closed). */
+  readonly open_utc: Timestamp;
+  /** End of the current forex-open window (or end of the next, if currently closed). */
+  readonly close_utc: Timestamp;
+  /** Seconds until close_utc; null if currently closed. */
+  readonly seconds_until_close: number | null;
+  /** Seconds until next open; null if currently open. */
+  readonly seconds_until_next_open: number | null;
+}
+
+const MINUTE_MS = 60_000;
+const COARSE_MS = 30 * MINUTE_MS;
+const MAX_COARSE = 8 * 48;  // 8 days of 30-min steps
+
+function findOpenStart(anchorMs: number, isOpenAt: (ms: number) => boolean): number {
+  let backMs = anchorMs;
+  for (let i = 0; i < MAX_COARSE; i++) {
+    if (!isOpenAt(backMs - COARSE_MS)) break;
+    backMs -= COARSE_MS;
+  }
+  let fine = backMs;
+  for (let j = 0; j < 30; j++) {
+    if (!isOpenAt(fine - MINUTE_MS)) break;
+    fine -= MINUTE_MS;
+  }
+  return fine;
+}
+
+function findOpenEnd(anchorMs: number, isOpenAt: (ms: number) => boolean): number {
+  let fwdMs = anchorMs;
+  for (let i = 0; i < MAX_COARSE; i++) {
+    if (!isOpenAt(fwdMs + COARSE_MS)) break;
+    fwdMs += COARSE_MS;
+  }
+  let fine = fwdMs;
+  for (let j = 0; j < 30; j++) {
+    if (!isOpenAt(fine + MINUTE_MS)) break;
+    fine += MINUTE_MS;
+  }
+  return fine + MINUTE_MS;
+}
+
+function findNextOpen(anchorMs: number, isOpenAt: (ms: number) => boolean): number {
+  let fwdMs = anchorMs;
+  for (let i = 0; i < MAX_COARSE; i++) {
+    if (isOpenAt(fwdMs + COARSE_MS)) break;
+    fwdMs += COARSE_MS;
+  }
+  let fine = fwdMs;
+  for (let j = 0; j < 30; j++) {
+    if (isOpenAt(fine + MINUTE_MS)) break;
+    fine += MINUTE_MS;
+  }
+  return fine + MINUTE_MS;
+}
+
+/**
+ * §7 / Stage 6: UTC bounds of the current forex-open window.
+ * - If currently open: open_utc = week start, close_utc = week end.
+ * - If currently closed: open_utc = next week start, close_utc = next week end.
+ * DST-aware (via classifySession).
+ */
+export function currentSessionUtcBounds(at: Timestamp): SessionBounds {
+  const nowMs = new Date(at).getTime();
+  if (!Number.isFinite(nowMs)) {
+    return {
+      session: 'CLOSED',
+      is_market_open: false,
+      open_utc: at,
+      close_utc: at,
+      seconds_until_close: null,
+      seconds_until_next_open: null,
+    };
+  }
+
+  const alignedMs = Math.floor(nowMs / MINUTE_MS) * MINUTE_MS;
+  const isOpenAt = (ms: number): boolean =>
+    classifySession(new Date(ms).toISOString()).is_market_open;
+
+  const info = classifySession(at);
+  const openNow = info.is_market_open;
+
+  if (openNow) {
+    const startMs = findOpenStart(alignedMs, isOpenAt);
+    const endMs = findOpenEnd(alignedMs, isOpenAt);
+    return {
+      session: info.session,
+      is_market_open: true,
+      open_utc: new Date(startMs).toISOString(),
+      close_utc: new Date(endMs).toISOString(),
+      seconds_until_close: Math.round((endMs - nowMs) / 1000),
+      seconds_until_next_open: null,
+    };
+  }
+
+  const nextOpenMs = findNextOpen(alignedMs, isOpenAt);
+  const nextCloseMs = findOpenEnd(nextOpenMs, isOpenAt);
+  return {
+    session: 'CLOSED',
+    is_market_open: false,
+    open_utc: new Date(nextOpenMs).toISOString(),
+    close_utc: new Date(nextCloseMs).toISOString(),
+    seconds_until_close: null,
+    seconds_until_next_open: Math.round((nextOpenMs - nowMs) / 1000),
+  };
+}

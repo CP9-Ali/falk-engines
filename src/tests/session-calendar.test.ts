@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifySession, classifyGap } from '../calendar/session-calendar';
+import { classifySession, classifyGap, currentSessionUtcBounds } from '../calendar/session-calendar';
 
 describe('Session Calendar (§7)', () => {
   // Monday 2025-01-06 00:00 UTC = session ASIA
@@ -330,5 +330,77 @@ describe('Stage 4B — Transition window (EU GMT, US EDT)', () => {
       expect(g.closed_candles).toBeGreaterThan(0);
       expect(g.needs_refetch).toBe(true);
     });
+  });
+});
+
+
+// =====================================================================
+// Stage 6: currentSessionUtcBounds()
+// =====================================================================
+
+describe('Stage 6 — currentSessionUtcBounds()', () => {
+  it('winter Mon 10:00 UTC: open, closes Fri 22:00 UTC (4d 12h)', () => {
+    const b = currentSessionUtcBounds('2025-01-06T10:00:00.000Z');
+    expect(b.session).toBe('LONDON');
+    expect(b.is_market_open).toBe(true);
+    expect(b.open_utc).toBe('2025-01-05T22:00:00.000Z');
+    expect(b.close_utc).toBe('2025-01-10T22:00:00.000Z');
+    expect(b.seconds_until_close).toBe(4 * 86400 + 12 * 3600);
+    expect(b.seconds_until_next_open).toBeNull();
+  });
+
+  it('winter Fri 21:59 UTC: open, closes in 60s', () => {
+    const b = currentSessionUtcBounds('2025-01-10T21:59:00.000Z');
+    expect(b.session).toBe('NEW_YORK');
+    expect(b.is_market_open).toBe(true);
+    expect(b.close_utc).toBe('2025-01-10T22:00:00.000Z');
+    expect(b.seconds_until_close).toBe(60);
+  });
+
+  it('winter Fri 22:00 UTC: closed, opens Sun 22:00 UTC (2d)', () => {
+    const b = currentSessionUtcBounds('2025-01-10T22:00:00.000Z');
+    expect(b.session).toBe('CLOSED');
+    expect(b.is_market_open).toBe(false);
+    expect(b.open_utc).toBe('2025-01-12T22:00:00.000Z');
+    expect(b.close_utc).toBe('2025-01-17T22:00:00.000Z');
+    expect(b.seconds_until_close).toBeNull();
+    expect(b.seconds_until_next_open).toBe(2 * 86400);
+  });
+
+  it('winter Sat 12:00 UTC: closed, opens Sun 22:00 UTC (34h)', () => {
+    const b = currentSessionUtcBounds('2025-01-04T12:00:00.000Z');
+    expect(b.is_market_open).toBe(false);
+    expect(b.open_utc).toBe('2025-01-05T22:00:00.000Z');
+    expect(b.seconds_until_next_open).toBe(34 * 3600);
+  });
+
+  it('summer Mon 10:00 UTC: open, closes Fri 21:00 UTC (4d 11h)', () => {
+    const b = currentSessionUtcBounds('2025-07-07T10:00:00.000Z');
+    expect(b.is_market_open).toBe(true);
+    expect(b.open_utc).toBe('2025-07-06T21:00:00.000Z');
+    expect(b.close_utc).toBe('2025-07-11T21:00:00.000Z');
+    expect(b.seconds_until_close).toBe(4 * 86400 + 11 * 3600);
+  });
+
+  it('summer Sun 20:59 UTC: closed, opens in 60s', () => {
+    const b = currentSessionUtcBounds('2025-07-06T20:59:00.000Z');
+    expect(b.is_market_open).toBe(false);
+    expect(b.open_utc).toBe('2025-07-06T21:00:00.000Z');
+    expect(b.seconds_until_next_open).toBe(60);
+  });
+
+  it('summer Sun 21:00 UTC: open (5-day window)', () => {
+    const b = currentSessionUtcBounds('2025-07-06T21:00:00.000Z');
+    expect(b.is_market_open).toBe(true);
+    expect(b.open_utc).toBe('2025-07-06T21:00:00.000Z');
+    expect(b.close_utc).toBe('2025-07-11T21:00:00.000Z');
+    expect(b.seconds_until_close).toBe(5 * 86400);
+  });
+
+  it('invalid input returns safe defaults', () => {
+    const b = currentSessionUtcBounds('not-a-date');
+    expect(b.is_market_open).toBe(false);
+    expect(b.seconds_until_close).toBeNull();
+    expect(b.seconds_until_next_open).toBeNull();
   });
 });
