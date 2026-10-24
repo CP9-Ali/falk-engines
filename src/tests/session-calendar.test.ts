@@ -233,3 +233,102 @@ describe('Gap Classifier — DST aware (§6.2 stage 4)', () => {
     expect(g.needs_refetch).toBe(false);
   });
 });
+
+
+// =====================================================================
+// Stage 4B: Transition window (EU GMT, US EDT) — Oct 26 to Nov 2
+// =====================================================================
+
+describe('Stage 4B — Transition window (EU GMT, US EDT)', () => {
+  // Between EU fall-back (last Sun of Oct) and US fall-back (first Sun of Nov),
+  // London is on GMT (UTC+0) while NY is still on EDT (UTC-4).
+  // This gives a UNIQUE 4-hour London-NY offset (instead of 5h normally)
+  // and a 5-hour OVERLAP (12:00-17:00 UTC) instead of 4h.
+
+  describe('Session classification (Mon Oct 27 2025)', () => {
+    it('11:30 UTC = LONDON (NY still closed at 07:30 EDT)', () => {
+      const at = new Date(Date.UTC(2025, 9, 27, 11, 30, 0)).toISOString();
+      expect(classifySession(at).session).toBe('LONDON');
+    });
+
+    it('12:30 UTC = OVERLAP (NY opens 08:30 EDT — new overlap start)', () => {
+      const at = new Date(Date.UTC(2025, 9, 27, 12, 30, 0)).toISOString();
+      expect(classifySession(at).session).toBe('OVERLAP_LD_NY');
+    });
+
+    it('14:00 UTC = OVERLAP (mid-overlap)', () => {
+      const at = new Date(Date.UTC(2025, 9, 27, 14, 0, 0)).toISOString();
+      expect(classifySession(at).session).toBe('OVERLAP_LD_NY');
+    });
+
+    it('16:30 UTC = OVERLAP (unlike summer; London still open 16:30 GMT)', () => {
+      const at = new Date(Date.UTC(2025, 9, 27, 16, 30, 0)).toISOString();
+      expect(classifySession(at).session).toBe('OVERLAP_LD_NY');
+    });
+
+    it('17:30 UTC = NEW_YORK (London closes 17:00 GMT)', () => {
+      const at = new Date(Date.UTC(2025, 9, 27, 17, 30, 0)).toISOString();
+      expect(classifySession(at).session).toBe('NEW_YORK');
+    });
+
+    it('20:30 UTC = NEW_YORK (before 17:00 EDT close)', () => {
+      const at = new Date(Date.UTC(2025, 9, 27, 20, 30, 0)).toISOString();
+      expect(classifySession(at).session).toBe('NEW_YORK');
+    });
+  });
+
+  describe('Market open/close boundaries', () => {
+    it('Sun Oct 26 20:30 UTC = CLOSED (NY 16:30 EDT, before 17:00 open)', () => {
+      const at = new Date(Date.UTC(2025, 9, 26, 20, 30, 0)).toISOString();
+      expect(classifySession(at).is_market_open).toBe(false);
+    });
+
+    it('Sun Oct 26 21:00 UTC = OPEN (NY 17:00 EDT)', () => {
+      const at = new Date(Date.UTC(2025, 9, 26, 21, 0, 0)).toISOString();
+      expect(classifySession(at).is_market_open).toBe(true);
+    });
+
+    it('Fri Oct 31 20:30 UTC = OPEN (before NY 17:00 EDT close)', () => {
+      const at = new Date(Date.UTC(2025, 9, 31, 20, 30, 0)).toISOString();
+      const s = classifySession(at);
+      expect(s.session).toBe('NEW_YORK');
+      expect(s.is_market_open).toBe(true);
+    });
+
+    it('Fri Oct 31 21:00 UTC = CLOSED (NY 17:00 EDT Friday close)', () => {
+      const at = new Date(Date.UTC(2025, 9, 31, 21, 0, 0)).toISOString();
+      expect(classifySession(at).is_market_open).toBe(false);
+    });
+
+    it('Sun Nov 2 21:00 UTC = CLOSED (US fell back; NY 16:00 EST)', () => {
+      const at = new Date(Date.UTC(2025, 10, 2, 21, 0, 0)).toISOString();
+      expect(classifySession(at).is_market_open).toBe(false);
+    });
+
+    it('Sun Nov 2 22:00 UTC = OPEN (NY 17:00 EST, winter behavior resumed)', () => {
+      const at = new Date(Date.UTC(2025, 10, 2, 22, 0, 0)).toISOString();
+      expect(classifySession(at).is_market_open).toBe(true);
+    });
+  });
+
+  describe('Gap classification during transition', () => {
+    it('Mon 11:30→12:30 UTC: entire gap in open market → UNEXPECTED', () => {
+      const from = new Date(Date.UTC(2025, 9, 27, 11, 30, 0)).toISOString();
+      const to = new Date(Date.UTC(2025, 9, 27, 12, 30, 0)).toISOString();
+      const g = classifyGap(from, to, 60_000);
+      expect(g.gap_type).toBe('UNEXPECTED_FEED_ERROR');
+      expect(g.open_candles).toBe(59);
+      expect(g.closed_candles).toBe(0);
+    });
+
+    it('Fri 20:30→21:30 UTC: spans NY close → EXPECTED', () => {
+      const from = new Date(Date.UTC(2025, 9, 31, 20, 30, 0)).toISOString();
+      const to = new Date(Date.UTC(2025, 9, 31, 21, 30, 0)).toISOString();
+      const g = classifyGap(from, to, 60_000);
+      expect(g.gap_type).toBe('EXPECTED_MARKET_CLOSED');
+      expect(g.open_candles).toBeGreaterThan(0);
+      expect(g.closed_candles).toBeGreaterThan(0);
+      expect(g.needs_refetch).toBe(true);
+    });
+  });
+});
