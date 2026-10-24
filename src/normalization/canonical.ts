@@ -2,6 +2,7 @@ import type { RawDataPoint } from '../core/types';
 import { engineVersion } from '../core/versions';
 import { resolveUnits, type PriceUnit, type VolumeUnit } from './unit-normalizer';
 import type { Candle } from '../data-quality/checks/base';
+import { mapSchema } from './schema-mapper';
 
 // Stage 8B: per-mapping versions (§7.2)
 export const SYMBOL_MAPPING_VERSION = '1.0.0';
@@ -133,21 +134,40 @@ export interface LineageRef {
   readonly raw_path: string;
 }
 
+/**
+ * Stage 11B: defensive shape check. Connectors already normalize fields,
+ * but for a future source that sends { o, h, l, c } we route through
+ * schema-mapper. Returns raw as-is if no mapping applies (NaN propagates
+ * and is filtered by isValidCandle downstream).
+ */
+function ensureCandleShape(sourceId: string, v: Candle): Candle {
+  const hasCanonical = (o: any): boolean =>
+    typeof o?.open === 'number' && typeof o?.high === 'number' &&
+    typeof o?.low === 'number' && typeof o?.close === 'number';
+  if (hasCanonical(v)) return v;
+  const mapped = mapSchema(v as unknown as Record<string, unknown>);
+  if (hasCanonical(mapped)) return mapped as unknown as Candle;
+  return v;
+}
+
 export function toCanonical(
   raw: RawDataPoint<Candle>,
   timeframe: CanonicalTimeframe,
   lineage: LineageRef,
 ): CanonicalCandle {
   const volume_semantics = VOLUME_SEMANTICS_BY_SOURCE[raw.sourceId] ?? 'UNKNOWN';
+  const val = ensureCandleShape(raw.sourceId, raw.value);  // Stage 11B
   const source_symbol = SOURCE_SYMBOL_BY_SOURCE[raw.sourceId] ?? 'UNKNOWN';
   const meta = getSourceMetadata(raw.sourceId);
-  const tzLookup = SOURCE_TIMEZONE[raw.sourceId];
+  // Stage 11C: aggregators may force UNKNOWN if any upstream was UNKNOWN
+  const derivedTzStatus = raw.derivedTimezoneStatus;
+  const tzLookup = derivedTzStatus === 'UNKNOWN' ? undefined : SOURCE_TIMEZONE[raw.sourceId];
   const source_timezone = tzLookup ?? 'UNKNOWN';
   const source_timezone_status: 'RESOLVED' | 'UNKNOWN' = tzLookup ? 'RESOLVED' : 'UNKNOWN';
   const time_blocked = source_timezone_status === 'UNKNOWN';
   const precision = PRECISION_BY_SOURCE[raw.sourceId];
   const units = resolveUnits(raw.sourceId);
-  const rawVolume = raw.value.volume;
+  const rawVolume = val.volume;
   const volume_value = volume_semantics === 'UNKNOWN' ? null : rawVolume;
 
   return {
@@ -171,10 +191,10 @@ export function toCanonical(
     candle_open_time_utc: raw.eventTime,
     candle_close_time_utc: raw.closedAt ?? null,
     is_final: raw.closedAt !== undefined,
-    open: raw.value.open,
-    high: raw.value.high,
-    low: raw.value.low,
-    close: raw.value.close,
+    open: val.open,
+    high: val.high,
+    low: val.low,
+    close: val.close,
     volume_value,
     volume_semantics,
     raw_fingerprint: raw.fingerprint,

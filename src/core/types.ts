@@ -44,4 +44,6 @@ export interface RawDataPoint<T = unknown> {
   readonly fingerprint: Fingerprint;
   /** Stage 8B: original timestamp as provided by source (pre-UTC conversion) */
   readonly sourceTimestamp?: string;
+  /** Stage 11C: aggregators set this if any upstream source had UNKNOWN timezone */
+  readonly derivedTimezoneStatus?: 'RESOLVED' | 'UNKNOWN';
 }

@@ -8,6 +8,14 @@ const H3_MS = 3 * 60 * 60 * 1000;
  * لا يُصدر H3 إلا عند اكتمال 3 شموع (الشمعة الناقصة لا تُستخدم).
  * Boundaries: 00:00, 03:00, 06:00, 09:00, 12:00, 15:00, 18:00, 21:00 UTC.
  */
+const KNOWN_UTC_SOURCES = new Set([
+  'twelvedata-ws', 'binance-paxg', 'fcsapi-xau', 'xaus-api', 'h3-aggregated',
+]);
+
+function upstreamHasUnknownTz(sorted: ReadonlyArray<RawDataPoint<Candle>>): boolean {
+  return sorted.some(p => !KNOWN_UTC_SOURCES.has(p.sourceId));
+}
+
 export class H3Aggregator {
   private buffer = new Map<number, RawDataPoint<Candle>[]>();
 
@@ -49,6 +57,7 @@ export class H3Aggregator {
       eventTime: new Date(bucketStart).toISOString(),
       sourceTimestamp: first.sourceTimestamp ?? String(bucketStart),
       closedAt: new Date(bucketStart + H3_MS).toISOString(),
+      derivedTimezoneStatus: upstreamHasUnknownTz(sorted) ? 'UNKNOWN' : undefined,
       arrivalTime: new Date().toISOString(),
       availabilityTime: new Date(bucketStart + H3_MS).toISOString(),
       version: 1,
@@ -99,6 +108,7 @@ export class H3Aggregator {
         eventTime: new Date(bucketStart).toISOString(),
         sourceTimestamp: first.sourceTimestamp ?? String(bucketStart),
         closedAt: new Date(bucketStart + H3_MS).toISOString(),
+        derivedTimezoneStatus: upstreamHasUnknownTz(sorted) ? 'UNKNOWN' : undefined,
         arrivalTime: new Date().toISOString(),
         availabilityTime: new Date(bucketStart + H3_MS).toISOString(),
         version: 1,
