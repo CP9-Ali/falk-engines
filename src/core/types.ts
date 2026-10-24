@@ -42,4 +42,6 @@ export interface RawDataPoint<T = unknown> {
   readonly availabilityTime: Timestamp;
   readonly version: number;
   readonly fingerprint: Fingerprint;
+  /** Stage 8B: original timestamp as provided by source (pre-UTC conversion) */
+  readonly sourceTimestamp?: string;
 }

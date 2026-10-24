@@ -3,6 +3,12 @@ import { engineVersion } from '../core/versions';
 import { resolveUnits, type PriceUnit, type VolumeUnit } from './unit-normalizer';
 import type { Candle } from '../data-quality/checks/base';
 
+// Stage 8B: per-mapping versions (§7.2)
+export const SYMBOL_MAPPING_VERSION = '1.0.0';
+export const UNIT_MAPPING_VERSION = '1.0.0';
+export const PRECISION_MAPPING_VERSION = '1.0.0';
+export const VOLUME_MAPPING_VERSION = '1.0.0';
+
 export type VolumeSemantics = 'TICK' | 'REAL' | 'CONTRACT' | 'UNKNOWN';
 export type CanonicalTimeframe = '1m' | '5m' | '15m' | '1h' | '4h' | '1d' | '1w';
 export type InstrumentType = 'SPOT' | 'CFD' | 'FUTURE' | 'CRYPTO' | 'INDEX' | 'AGGREGATED' | 'UNKNOWN';
@@ -67,6 +73,11 @@ export interface CanonicalCandle {
   readonly raw_payload_ref: string;
   readonly normalization_version: string;
   readonly processing_version: string;
+  /** Stage 8B: per-mapping versions (§7.2) */
+  readonly symbol_mapping_version?: string;
+  readonly unit_mapping_version?: string;
+  readonly precision_mapping_version?: string;
+  readonly volume_mapping_version?: string;
   readonly decimal_places?: number;
   readonly tick_size?: number;
   readonly price_unit?: string;
@@ -149,7 +160,7 @@ export function toCanonical(
     base_currency: meta.base_currency,
     timeframe,
     event_time_utc: raw.eventTime,
-    source_timestamp: raw.eventTime,
+    source_timestamp: raw.sourceTimestamp ?? raw.eventTime,
     source_timezone,
     source_timezone_status,
     time_blocked,
@@ -171,6 +182,10 @@ export function toCanonical(
     raw_payload_ref: lineage.raw_path,
     normalization_version: engineVersion('normalization'),
     processing_version: engineVersion('normalization'),
+    symbol_mapping_version: SYMBOL_MAPPING_VERSION,
+    unit_mapping_version: UNIT_MAPPING_VERSION,
+    precision_mapping_version: PRECISION_MAPPING_VERSION,
+    volume_mapping_version: VOLUME_MAPPING_VERSION,
     ...(precision
       ? {
           decimal_places: precision.decimal_places,
