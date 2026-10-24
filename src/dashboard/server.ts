@@ -58,6 +58,33 @@ export class DashboardServer {
       const bounds = currentSessionUtcBounds(t);
       res.json({ ...info, ...bounds, server_time_utc: new Date().toISOString() });
     });
+    // Stage 9: session history for dashboard chart
+    this.app.get('/api/session/history', (req, res) => {
+      const daysRaw = req.query.days;
+      const n = Number(daysRaw);
+      const days = Number.isFinite(n) ? Math.min(Math.max(n, 1), 30) : 7;
+      const history: Array<{
+        day: string;
+        session: string;
+        is_market_open: boolean;
+        open_utc: string;
+        close_utc: string;
+      }> = [];
+      const nowMs = Date.now();
+      for (let i = days - 1; i >= 0; i--) {
+        const at = new Date(nowMs - i * 86_400_000).toISOString();
+        const b = currentSessionUtcBounds(at);
+        history.push({
+          day: at.slice(0, 10),
+          session: b.session,
+          is_market_open: b.is_market_open,
+          open_utc: b.open_utc,
+          close_utc: b.close_utc,
+        });
+      }
+      res.json({ days, history });
+    });
+
 
     this.wss.on('connection', (ws) => {
       this.clients.add(ws);

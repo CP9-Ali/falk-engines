@@ -1,411 +1,69 @@
 <!DOCTYPE html>
-<html lang="en" dir="ltr">
+<html lang="en">
 <head>
-<meta charset="UTF-8">
-<title>FALK - XAUUSD Dashboard</title>
-<script src="https://unpkg.com/lightweight-charts@4.1.3/dist/lightweight-charts.standalone.production.js"></script>
-<style>
-*{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',Tahoma,sans-serif;background:#0a0e27;color:#e0e0e0;min-height:100vh}
-.header{background:linear-gradient(135deg,#1a1f3a,#0f1429);padding:16px 24px;border-bottom:2px solid #f5a623;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:16px}
-.symbol{font-size:24px;font-weight:bold;color:#f5a623;letter-spacing:1px}
-.subtitle{font-size:11px;color:#8892b0;margin-top:2px}
-.price{font-size:34px;font-weight:bold;font-variant-numeric:tabular-nums}
-.up{color:#00e676}.down{color:#ff5252}.neutral{color:#f5a623}
-.change{font-size:13px}
-.status{display:flex;gap:18px;font-size:12px;color:#8892b0;align-items:center;flex-wrap:wrap}
-.dot{width:9px;height:9px;border-radius:50%;display:inline-block;margin-right:5px}
-.dot-on{background:#00e676;box-shadow:0 0 10px #00e676}
-.dot-off{background:#ff5252}
-.dot-live{background:#00e5ff;box-shadow:0 0 10px #00e5ff}
-.ticker-bar{background:#131829;padding:7px 24px;font-size:11px;color:#8892b0;border-bottom:1px solid #2a3050;display:flex;gap:24px;flex-wrap:wrap}
-.ticker-bar strong{color:#e0e0e0}
-.tf-tabs{display:flex;background:#0f1429;border-bottom:1px solid #2a3050;padding:0 24px;overflow-x:auto}
-.tf-tab{padding:11px 20px;font-size:13px;font-weight:bold;color:#8892b0;cursor:pointer;border-bottom:3px solid transparent;transition:all 0.2s;user-select:none;white-space:nowrap}
-.tf-tab:hover{color:#e0e0e0;background:#131829}
-.tf-tab.active{color:#f5a623;border-bottom-color:#f5a623;background:#131829}
-.tf-tab .count{font-size:10px;color:#5a6490;margin-left:6px;font-weight:normal}
-.grid{display:grid;grid-template-columns:2fr 1fr;gap:16px;padding:16px;max-width:1800px;margin:0 auto}
-.card{background:#131829;border-radius:10px;padding:16px;border:1px solid #2a3050;margin-bottom:16px}
-.card h3{font-size:11px;text-transform:uppercase;color:#8892b0;margin-bottom:10px;letter-spacing:1.2px;font-weight:600;display:flex;justify-content:space-between;align-items:center}
-.chart-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:8px}
-.chart-header h3{margin:0}
-.ohlc-readout{font-size:11px;font-family:Consolas,monospace;color:#d0d5e8;font-variant-numeric:tabular-nums;background:#0a0e27;padding:4px 10px;border-radius:4px;min-height:20px}
-.ohlc-readout span{color:#8892b0}
-#chart-price{height:420px;width:100%}
-#chart-rsi,#chart-atr{height:130px;width:100%}
-.features{display:grid;grid-template-columns:1fr;gap:10px}
-.feature{background:#0f1429;padding:14px 18px;border-radius:8px;border-left:4px solid #f5a623}
-.feature-label{font-size:10px;color:#8892b0;text-transform:uppercase;letter-spacing:1px}
-.feature-value{font-size:24px;font-weight:bold;margin-top:4px;font-variant-numeric:tabular-nums}
-.feature-meta{font-size:10px;color:#5a6490;margin-top:2px}
-.log{max-height:340px;overflow-y:auto;font-family:Consolas,monospace;font-size:11px;background:#0a0e27;padding:6px;border-radius:6px}
-.log-entry{padding:5px 7px;border-bottom:1px solid #1a1f3a;display:flex;gap:8px;align-items:flex-start}
-.log-time{color:#5a6490;min-width:58px;flex-shrink:0;font-size:10px}
-.log-type{font-weight:bold;min-width:64px;flex-shrink:0;font-size:9px;padding-top:2px}
-.log-info{color:#d0d5e8;flex:1;word-break:break-word;font-size:10.5px}
-.t-CANDLE{color:#f5a623}.t-QUALITY{color:#00e5ff}.t-FUSION{color:#bd93f9}.t-FEATURE{color:#00e676}.t-TASK{color:#ff9f43}.t-WORM{color:#ff6b9d}.t-ERROR{color:#ff5252}.t-INFO{color:#8892b0}
-.worm-num{font-size:40px;font-weight:bold;color:#ff6b9d;font-variant-numeric:tabular-nums;line-height:1}
-.worm-last{font-size:10px;color:#5a6490;margin-top:6px;font-family:Consolas,monospace;word-break:break-all}
-@media(max-width:1100px){.grid{grid-template-columns:1fr}#chart-price{height:320px}}
-</style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FALK · Gold Market Dashboard</title>
+  <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
-<div class="header">
-  <div>
-    <div class="symbol">XAUUSD - GOLD SPOT</div>
-    <div class="subtitle">FALK Professional Dashboard - 8 Timeframes</div>
-  </div>
-  <div style="text-align:right">
-    <div class="price neutral" id="price">--</div>
-    <div class="change" id="change">--</div>
-  </div>
-  <div class="status">
-    <div><span class="dot dot-off" id="ws-dot"></span>WS</div>
-    <div><span class="dot dot-live"></span>LIVE</div>
-    <div><strong id="total-candles">0</strong> candles</div>
-  </div>
-</div>
+  <header>
+    <div>
+      <h1>FALK · Gold Market Dashboard</h1>
+      <div class="subtitle">XAUUSD · session-aware · DST-correct</div>
+    </div>
+    <div class="status">
+      <span class="dot" id="conn-dot"></span>
+      <span id="conn-status">connecting…</span>
+    </div>
+  </header>
 
-<div class="ticker-bar">
-  <div>Last tick: <strong id="last-tick">--</strong></div>
-  <div>Source: <strong id="tick-source">--</strong></div>
-  <div>Ticks: <strong id="tick-count">0</strong></div>
-  <div>Volume: <strong id="vol-semantics">--</strong></div>
-  <div>Uptime: <strong id="uptime">0s</strong></div>
-</div>
-
-<div class="tf-tabs" id="tf-tabs"></div>
-
-<div class="grid">
-  <div>
+  <section class="grid">
     <div class="card">
-      <div class="chart-header">
-        <h3>XAUUSD - <span id="active-tf-label">1m</span> <span style="color:#5a6490;font-size:10px;font-weight:normal;margin-left:6px">Candlestick + SMA(20) + Volume</span></h3>
-        <div class="ohlc-readout" id="ohlc-readout">--</div>
-      </div>
-      <div id="chart-price"></div>
+      <div class="label">Session</div>
+      <div class="value" id="session-name">—</div>
+      <div class="sub" id="session-status">—</div>
     </div>
     <div class="card">
-      <div class="chart-header"><h3>RSI 14 <span style="color:#5a6490;font-size:10px;font-weight:normal">?70 OB / ?30 OS</span></h3></div>
-      <div id="chart-rsi"></div>
+      <div class="label">Next event</div>
+      <div class="value" id="next-event">—</div>
+      <div class="sub" id="next-event-sub">—</div>
     </div>
     <div class="card">
-      <div class="chart-header"><h3>ATR 14 <span style="color:#5a6490;font-size:10px;font-weight:normal">Volatility</span></h3></div>
-      <div id="chart-atr"></div>
-    </div>
-  </div>
-  <div>
-    <div class="card">
-      <h3>Features</h3>
-      <div class="features">
-        <div class="feature"><div class="feature-label">SMA 20</div><div class="feature-value" id="feat-sma">N/A</div><div class="feature-meta">period=20</div></div>
-        <div class="feature"><div class="feature-label">RSI 14</div><div class="feature-value" id="feat-rsi">N/A</div><div class="feature-meta">period=14, 0-100</div></div>
-        <div class="feature"><div class="feature-label">ATR 14</div><div class="feature-value" id="feat-atr">N/A</div><div class="feature-meta">period=14, price units</div></div>
-      </div>
+      <div class="label">Week open (UTC)</div>
+      <div class="value mono" id="open-utc">—</div>
     </div>
     <div class="card">
-      <h3>WORM Snapshots</h3>
-      <div class="worm-num" id="worm-count">0</div>
-      <div class="worm-last">Last: <span id="worm-last">--</span></div>
+      <div class="label">Week close (UTC)</div>
+      <div class="value mono" id="close-utc">—</div>
+    </div>
+  </section>
+
+  <section class="grid">
+    <div class="card">
+      <div class="label">Last tick</div>
+      <div class="value mono" id="last-tick">—</div>
+      <div class="sub" id="last-tick-source">—</div>
     </div>
     <div class="card">
-      <h3>Event Stream</h3>
-      <div class="log" id="log"></div>
+      <div class="label">Candles received</div>
+      <div class="value" id="candle-count">0</div>
     </div>
-  </div>
-</div>
+    <div class="card">
+      <div class="label">Quality</div>
+      <div class="value" id="quality-status">—</div>
+    </div>
+    <div class="card">
+      <div class="label">WS clients</div>
+      <div class="value" id="client-count">0</div>
+    </div>
+  </section>
 
-<script>
-(function() {
-  'use strict';
+  <section>
+    <h2>Recent events</h2>
+    <ul id="events"><li class="empty">waiting for events…</li></ul>
+  </section>
 
-  if (typeof LightweightCharts === 'undefined') {
-    document.body.innerHTML = '<div style="padding:40px;text-align:center;color:#ff5252;font-size:18px">Failed to load Lightweight Charts. Check internet.</div>';
-    return;
-  }
-
-  var TFS = ['1m', '5m', '15m', '1h', 'H3', '4h', '1d', '1w'];
-  var TF_LABEL = { '1m':'1m', '5m':'5m', '15m':'15m', '1h':'1h', 'H3':'H3', '4h':'4h', '1d':'1d', '1w':'1w' };
-
-  var state = {
-    activeTf: '1m',
-    candles: {}, features: {}, seenFeatures: {},
-    lastCandleTime: {}, lastPlottedTime: {}, lastFeatureTime: {},
-    lastPrice: null, tickCount: 0, startTime: Date.now(), events: {}
-  };
-
-  for (var i = 0; i < TFS.length; i++) {
-    var tf = TFS[i];
-    state.candles[tf] = new Map();
-    state.features[tf] = { sma: new Map(), rsi: new Map(), atr: new Map() };
-    state.seenFeatures[tf] = { sma: new Set(), rsi: new Set(), atr: new Set() };
-    state.lastCandleTime[tf] = 0;
-    state.lastPlottedTime[tf] = 0;
-    state.lastFeatureTime[tf] = { sma: 0, rsi: 0, atr: 0 };
-    state.events[tf] = [];
-  }
-
-  var charts = { price: null, rsi: null, atr: null };
-  var series = { candles: null, sma: null, volume: null, rsi: null, atr: null };
-
-  function baseOpts(w, h) {
-    return {
-      width: w, height: h,
-      layout: { background: { color: '#131829' }, textColor: '#8892b0', fontSize: 10 },
-      grid: { vertLines: { color: '#1a1f3a' }, horzLines: { color: '#1a1f3a' } },
-      timeScale: { borderColor: '#2a3050', timeVisible: true, secondsVisible: false, rightOffset: 3, barSpacing: 6 },
-      rightPriceScale: { borderColor: '#2a3050' },
-      crosshair: { mode: 0, vertLine: { color: '#f5a623', width: 1, style: 2, labelBackgroundColor: '#f5a623' }, horzLine: { color: '#f5a623', width: 1, style: 2, labelBackgroundColor: '#f5a623' } },
-      handleScroll: { mouseWheel: true, pressedMouseMove: true },
-      handleScale: { mouseWheel: true, pinch: true }
-    };
-  }
-
-  function initCharts() {
-    var elP = document.getElementById('chart-price');
-    var elR = document.getElementById('chart-rsi');
-    var elA = document.getElementById('chart-atr');
-
-    charts.price = LightweightCharts.createChart(elP, baseOpts(elP.offsetWidth || 900, 420));
-    series.candles = charts.price.addCandlestickSeries({ upColor: '#00e676', downColor: '#ff5252', borderUpColor: '#00e676', borderDownColor: '#ff5252', wickUpColor: '#00e676', wickDownColor: '#ff5252' });
-    series.sma = charts.price.addLineSeries({ color: '#f5a623', lineWidth: 1, priceLineVisible: false, lastValueVisible: false, crosshairMarkerVisible: false });
-    series.volume = charts.price.addHistogramSeries({ priceFormat: { type: 'volume' }, priceScaleId: 'vol' });
-    charts.price.priceScale('vol').applyOptions({ scaleMargins: { top: 0.85, bottom: 0 } });
-    charts.price.priceScale('right').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.2 } });
-
-    charts.rsi = LightweightCharts.createChart(elR, baseOpts(elR.offsetWidth || 900, 130));
-    series.rsi = charts.rsi.addLineSeries({ color: '#00e5ff', lineWidth: 2 });
-    series.rsi.createPriceLine({ price: 70, color: '#ff5252', lineWidth: 1, lineStyle: 2 });
-    series.rsi.createPriceLine({ price: 30, color: '#00e676', lineWidth: 1, lineStyle: 2 });
-
-    charts.atr = LightweightCharts.createChart(elA, baseOpts(elA.offsetWidth || 900, 130));
-    series.atr = charts.atr.addLineSeries({ color: '#bd93f9', lineWidth: 2 });
-
-    var all = [charts.price, charts.rsi, charts.atr];
-    var syncing = false;
-    all.forEach(function(src) {
-      src.timeScale().subscribeVisibleLogicalRangeChange(function(range) {
-        if (syncing || !range) return;
-        syncing = true;
-        all.forEach(function(c) { if (c !== src) c.timeScale().setVisibleLogicalRange(range); });
-        syncing = false;
-      });
-    });
-
-    charts.price.subscribeCrosshairMove(function(p) {
-      var el = document.getElementById('ohlc-readout');
-      if (!p.time || !p.point || p.point.x < 0 || p.point.y < 0) { el.textContent = '--'; return; }
-      var c = p.seriesData.get(series.candles);
-      if (c) {
-        var dir = c.close >= c.open ? '#00e676' : '#ff5252';
-        el.innerHTML = '<span>O:</span> <b style="color:' + dir + '">' + c.open.toFixed(2) + '</b> <span>H:</span> <b style="color:#00e676">' + c.high.toFixed(2) + '</b> <span>L:</span> <b style="color:#ff5252">' + c.low.toFixed(2) + '</b> <span>C:</span> <b style="color:' + dir + '">' + c.close.toFixed(2) + '</b>';
-      }
-    });
-
-    window.addEventListener('resize', function() {
-      try {
-        charts.price.applyOptions({ width: elP.offsetWidth || 900 });
-        charts.rsi.applyOptions({ width: elR.offsetWidth || 900 });
-        charts.atr.applyOptions({ width: elA.offsetWidth || 900 });
-      } catch(e) {}
-    });
-  }
-
-  function toSec(iso) { return Math.floor(new Date(iso).getTime() / 1000); }
-
-  function renderActiveTf() {
-    if (!series.candles) return;
-    var tf = state.activeTf;
-    var cs = Array.from(state.candles[tf].values()).sort(function(a,b) { return a.time - b.time; });
-    var sma = Array.from(state.features[tf].sma.entries()).sort(function(a,b){return a[0]-b[0];}).map(function(e){return {time:e[0], value:e[1]};});
-    var rsi = Array.from(state.features[tf].rsi.entries()).sort(function(a,b){return a[0]-b[0];}).map(function(e){return {time:e[0], value:e[1]};});
-    var atr = Array.from(state.features[tf].atr.entries()).sort(function(a,b){return a[0]-b[0];}).map(function(e){return {time:e[0], value:e[1]};});
-
-    series.candles.setData(cs);
-    series.sma.setData(sma);
-    series.volume.setData(cs.map(function(c){ return { time: c.time, value: c.volume, color: c.close >= c.open ? 'rgba(0,230,118,0.4)' : 'rgba(255,82,82,0.4)' }; }));
-    series.rsi.setData(rsi);
-    series.atr.setData(atr);
-
-    state.lastPlottedTime[tf] = cs.length ? cs[cs.length-1].time : 0;
-    state.lastFeatureTime[tf].sma = sma.length ? sma[sma.length-1].time : 0;
-    state.lastFeatureTime[tf].rsi = rsi.length ? rsi[rsi.length-1].time : 0;
-    state.lastFeatureTime[tf].atr = atr.length ? atr[atr.length-1].time : 0;
-
-    document.getElementById('active-tf-label').textContent = TF_LABEL[tf];
-    document.getElementById('total-candles').textContent = cs.length;
-    document.getElementById('feat-sma').textContent = sma.length ? sma[sma.length-1].value.toFixed(2) : 'N/A';
-    document.getElementById('feat-rsi').textContent = rsi.length ? rsi[rsi.length-1].value.toFixed(2) : 'N/A';
-    document.getElementById('feat-atr').textContent = atr.length ? atr[atr.length-1].value.toFixed(2) : 'N/A';
-  }
-
-  function scheduleRebuild(tf) {
-    setTimeout(function() {
-      if (state.activeTf === tf) {
-        renderActiveTf();
-        try { charts.price.timeScale().fitContent(); charts.rsi.timeScale().fitContent(); charts.atr.timeScale().fitContent(); } catch(e) {}
-      }
-    }, 200);
-  }
-
-  function switchTf(tf) {
-    state.activeTf = tf;
-    var tabs = document.querySelectorAll('.tf-tab');
-    for (var i = 0; i < tabs.length; i++) tabs[i].classList.toggle('active', tabs[i].dataset.tf === tf);
-    renderActiveTf();
-    renderLog();
-    try { charts.price.timeScale().fitContent(); charts.rsi.timeScale().fitContent(); charts.atr.timeScale().fitContent(); } catch(e) {}
-  }
-
-  function buildTabs() {
-    var el = document.getElementById('tf-tabs');
-    el.innerHTML = '';
-    TFS.forEach(function(tf) {
-      var tab = document.createElement('div');
-      tab.className = 'tf-tab' + (tf === state.activeTf ? ' active' : '');
-      tab.dataset.tf = tf;
-      tab.innerHTML = tf + ' <span class="count" id="tab-count-' + tf + '">0</span>';
-      tab.onclick = function() { switchTf(tf); };
-      el.appendChild(tab);
-    });
-  }
-
-  function updateTabCounts() {
-    TFS.forEach(function(tf) {
-      var el = document.getElementById('tab-count-' + tf);
-      if (el) el.textContent = state.candles[tf].size;
-    });
-  }
-
-  function addLog(tf, type, info) {
-    var t = new Date().toLocaleTimeString('en-GB', { hour12: false });
-    state.events[tf].unshift({ time: t, type: type, info: info });
-    if (state.events[tf].length > 80) state.events[tf].pop();
-    if (tf === state.activeTf) renderLog();
-  }
-
-  function renderLog() {
-    var log = document.getElementById('log');
-    log.innerHTML = '';
-    var evs = state.events[state.activeTf] || [];
-    for (var i = 0; i < Math.min(evs.length, 60); i++) {
-      var e = evs[i];
-      var div = document.createElement('div');
-      div.className = 'log-entry';
-      div.innerHTML = '<span class="log-time">' + e.time + '</span><span class="log-type t-' + e.type + '">' + e.type + '</span><span class="log-info">' + e.info + '</span>';
-      log.appendChild(div);
-    }
-  }
-
-  function updateUptime() {
-    var s = Math.floor((Date.now() - state.startTime) / 1000);
-    document.getElementById('uptime').textContent = s < 60 ? s + 's' : Math.floor(s/60) + 'm ' + (s%60) + 's';
-  }
-  setInterval(updateUptime, 1000);
-
-  var ws = null;
-  function connect() {
-    ws = new WebSocket('ws://' + location.host);
-    ws.onopen = function() { document.getElementById('ws-dot').className = 'dot dot-on'; addLog(state.activeTf, 'INFO', 'Connected'); };
-    ws.onclose = function() { document.getElementById('ws-dot').className = 'dot dot-off'; addLog(state.activeTf, 'ERROR', 'Disconnected'); setTimeout(connect, 3000); };
-    ws.onerror = function() { document.getElementById('ws-dot').className = 'dot dot-off'; };
-    ws.onmessage = handleMessage;
-  }
-
-  function handleMessage(e) {
-    var m;
-    try { m = JSON.parse(e.data); } catch (err) { return; }
-    var tf = m.timeframe || '1m';
-
-    if (m.type === 'tick') {
-      if (m.data.source === 'XAU') window._lastXauTick = Date.now();
-      else if (window._lastXauTick && Date.now() - window._lastXauTick < 30000) return;
-      state.tickCount++;
-      document.getElementById('tick-count').textContent = state.tickCount;
-      document.getElementById('tick-source').textContent = m.data.source;
-      document.getElementById('last-tick').textContent = new Date(m.data.ts).toLocaleTimeString('en-GB', { hour12: false });
-      var p = document.getElementById('price');
-      p.textContent = '$' + m.data.price.toFixed(2);
-      if (state.lastPrice !== null) {
-        var d = m.data.price - state.lastPrice;
-        var pct = (d / state.lastPrice) * 100;
-        var ch = document.getElementById('change');
-        ch.textContent = (d >= 0 ? '+' : '') + d.toFixed(2) + ' (' + pct.toFixed(2) + '%)';
-        ch.className = 'change ' + (d >= 0 ? 'up' : 'down');
-        p.className = 'price ' + (d >= 0 ? 'up' : 'down');
-      }
-      state.lastPrice = m.data.price;
-      return;
-    }
-
-    if (m.type === 'candle') {
-      var raw = m.data;
-      if (!raw || !raw.value) return;
-      var t = toSec(raw.eventTime);
-      if (!isFinite(t)) return;
-      var c = { time: t, open: raw.value.open, high: raw.value.high, low: raw.value.low, close: raw.value.close, volume: raw.value.volume || 0 };
-      state.candles[tf].set(t, c);
-      state.lastCandleTime[tf] = t;
-
-      if (tf === state.activeTf && series.candles) {
-        var lastPlotted = state.lastPlottedTime[tf] || 0;
-        if (t > lastPlotted) {
-          try {
-            series.candles.update(c);
-            series.volume.update({ time: t, value: c.volume, color: c.close >= c.open ? 'rgba(0,230,118,0.4)' : 'rgba(255,82,82,0.4)' });
-            state.lastPlottedTime[tf] = t;
-          } catch (err) { scheduleRebuild(tf); }
-        } else if (t === lastPlotted) {
-          try { series.candles.update(c); } catch (err) { scheduleRebuild(tf); }
-        } else {
-          scheduleRebuild(tf);
-        }
-        document.getElementById('total-candles').textContent = state.candles[tf].size;
-        if (m.status !== 'BACKFILL') addLog(tf, 'CANDLE', raw.symbol + ' C=' + c.close.toFixed(2));
-      }
-      updateTabCounts();
-      return;
-    }
-
-    if (m.type === 'feature') {
-      var name = m.data.name;
-      if (name !== 'sma' && name !== 'rsi' && name !== 'atr') return;
-      var t = state.lastCandleTime[tf];
-      if (!t || m.data.value === null || m.data.value === undefined) return;
-      if (state.seenFeatures[tf][name].has(t)) return;
-      state.seenFeatures[tf][name].add(t);
-      state.features[tf][name].set(t, m.data.value);
-
-      if (tf === state.activeTf && series.sma) {
-        var s = name === 'sma' ? series.sma : (name === 'rsi' ? series.rsi : series.atr);
-        var lastFT = state.lastFeatureTime[tf][name] || 0;
-        if (t > lastFT) {
-          try { s.update({ time: t, value: m.data.value }); state.lastFeatureTime[tf][name] = t; } catch (err) { scheduleRebuild(tf); }
-        } else if (t < lastFT) {
-          scheduleRebuild(tf);
-        }
-        document.getElementById('feat-' + name).textContent = Number(m.data.value).toFixed(2);
-      }
-      return;
-    }
-
-    if (m.type === 'quality') { if (m.data.volume_semantics) document.getElementById('vol-semantics').textContent = m.data.volume_semantics; return; }
-    if (m.type === 'fusion') { addLog(tf, 'FUSION', 'value=' + m.data.value + ' ' + m.data.conflict); return; }
-    if (m.type === 'task' && m.data.state !== 'COMPLETED') { addLog(tf, 'TASK', m.data.state); return; }
-    if (m.type === 'worm') { document.getElementById('worm-count').textContent = m.data.total; document.getElementById('worm-last').textContent = m.data.id; return; }
-    if (m.type === 'error') { addLog(tf, 'ERROR', m.data.message); return; }
-  }
-
-  // Boot
-  initCharts();
-  buildTabs();
-  renderActiveTf();
-  setTimeout(function() { try { charts.price.timeScale().fitContent(); charts.rsi.timeScale().fitContent(); charts.atr.timeScale().fitContent(); } catch(e) {} }, 500);
-  connect();
-  addLog('1m', 'INFO', 'Waiting for data...');
-  console.log('[BOOT] Dashboard ready');
-})();
-</script>
+  <script src="/app.js"></script>
 </body>
 </html>
