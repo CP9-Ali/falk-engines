@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
+import { currentSessionUtcBounds, classifySession } from '../calendar/session-calendar';
+
 export type DashboardEvent =
   | { type: 'tick'; data: { source: string; price: number; ts: string } }
   | { type: 'candle'; timeframe?: string; data: any; status?: string }
@@ -27,7 +29,35 @@ export class DashboardServer {
 
   constructor(private port = 3000) {
     this.app.use(express.static(join(__dirname, 'public')));
-    this.app.get('/health', (_, res) => res.json({ ok: true, clients: this.clients.size, candles: this.candleHistory.size }));
+    this.app.get('/health', (_, res) => res.json({
+      ok: true,
+      clients: this.clients.size,
+      candles: this.candleHistory.size,
+      session: classifySession(new Date().toISOString()),
+    }));
+
+    // Stage 7A: session endpoints
+    this.app.get('/session/now', (_, res) => {
+      const now = new Date().toISOString();
+      const bounds = currentSessionUtcBounds(now);
+      res.json({ ...bounds, server_time_utc: now });
+    });
+
+    this.app.get('/session/at', (req, res) => {
+      const t = req.query.t;
+      if (typeof t !== 'string') {
+        res.status(400).json({ error: 'query param t required (ISO string)' });
+        return;
+      }
+      const d = new Date(t);
+      if (!Number.isFinite(d.getTime())) {
+        res.status(400).json({ error: 'invalid ISO timestamp' });
+        return;
+      }
+      const info = classifySession(t);
+      const bounds = currentSessionUtcBounds(t);
+      res.json({ ...info, ...bounds, server_time_utc: new Date().toISOString() });
+    });
 
     this.wss.on('connection', (ws) => {
       this.clients.add(ws);

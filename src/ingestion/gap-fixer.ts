@@ -1,7 +1,7 @@
 import type { RawDataPoint } from '../core/types';
 import type { Candle } from '../data-quality/checks/base';
 import type { ErrorQueue } from './error-queue';
-import { classifyGap, type GapType } from '../calendar/session-calendar';
+import { classifyGap, currentSessionUtcBounds, type GapType } from '../calendar/session-calendar';
 
 export interface Gap {
   readonly gap_id: string;
@@ -146,4 +146,96 @@ export class GapFixer {
     }
     return results;
   }
+  /**
+   * Stage 7B: detect gaps against an expected window, catching leading/trailing
+   * missing candles that detectFromPoints (between-candles only) misses.
+   */
+  detectFromExpectation(opts: {
+    expectedFromUtc: string;
+    expectedToUtc: string;
+    storedCandles: ReadonlyArray<RawDataPoint<Candle>>;
+  }): Gap[] {
+    const fromMs = new Date(opts.expectedFromUtc).getTime();
+    const toMs = new Date(opts.expectedToUtc).getTime();
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) return [];
+
+    const effectiveToMs = Math.min(toMs, Date.now());
+    if (effectiveToMs <= fromMs) return [];
+
+    const storedSet = new Set(
+      opts.storedCandles.map(p => new Date(p.eventTime).getTime()),
+    );
+
+    const out: Gap[] = [];
+    let runStart: number | null = null;
+    let runLast: number | null = null;
+
+    const flush = (): void => {
+      if (runStart === null || runLast === null) return;
+      out.push(this.buildGap(runStart, runLast + this.expectedCadenceMs));
+      runStart = null;
+      runLast = null;
+    };
+
+    for (let t = fromMs; t < effectiveToMs; t += this.expectedCadenceMs) {
+      if (!storedSet.has(t)) {
+        if (runStart === null) runStart = t;
+        runLast = t;
+      } else {
+        flush();
+      }
+    }
+    flush();
+
+    return out;
+  }
+
+  /**
+   * Stage 7B: convenience — detect gaps against the current forex session window.
+   * Returns [] when market is closed.
+   */
+  detectFromCurrentSession(
+    storedCandles: ReadonlyArray<RawDataPoint<Candle>>,
+  ): Gap[] {
+    const nowIso = new Date().toISOString();
+    const bounds = currentSessionUtcBounds(nowIso);
+    if (!bounds.is_market_open) return [];
+    const endMs = Math.min(
+      new Date(bounds.close_utc).getTime(),
+      new Date(nowIso).getTime(),
+    );
+    return this.detectFromExpectation({
+      expectedFromUtc: bounds.open_utc,
+      expectedToUtc: new Date(endMs).toISOString(),
+      storedCandles,
+    });
+  }
+
+  private buildGap(fromMs: number, toExclusiveMs: number): Gap {
+    const fromUtc = new Date(fromMs).toISOString();
+    const toUtc = new Date(toExclusiveMs).toISOString();
+    const analysis = classifyGap(fromUtc, toUtc, this.expectedCadenceMs);
+    const needsRefetch = analysis.needs_refetch;
+    const status: 'PENDING' | 'ABANDONED' = needsRefetch ? 'PENDING' : 'ABANDONED';
+    const reason = needsRefetch
+      ? 'missing-candles'
+      : 'market-closed: ' + analysis.closed_candles + ' candles';
+    return {
+      gap_id: 'exp-' + this.timeframe + '-' + fromMs + '-' + toExclusiveMs,
+      source_id: this.sourceId,
+      timeframe: this.timeframe,
+      from_utc: fromUtc,
+      to_utc: toUtc,
+      reason,
+      detected_at_utc: new Date().toISOString(),
+      status,
+      analysis: {
+        open_candles: analysis.open_candles,
+        closed_candles: analysis.closed_candles,
+        needs_refetch: analysis.needs_refetch,
+        gap_type: analysis.gap_type,
+      },
+    };
+  }
+
 }
