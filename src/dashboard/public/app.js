@@ -36,7 +36,19 @@
     crosshair: { mode: 1, vertLine: { color: '#4b5563', width: 1, style: 2 }, horzLine: { color: '#4b5563', width: 1, style: 2 } },
   };
 
-  const mainChart = LC.createChart($('main-chart'), { ...commonOpts, height: 380 });
+  function attachResize(chart, container) {
+    const ro = new ResizeObserver(() => {
+      const { width, height } = container.getBoundingClientRect();
+      if (width > 0 && height > 0) {
+        chart.applyOptions({ width: Math.floor(width), height: Math.floor(height) });
+      }
+    });
+    ro.observe(container);
+    const { width, height } = container.getBoundingClientRect();
+    if (width > 0 && height > 0) chart.applyOptions({ width, height });
+  }
+
+  const mainChart = LC.createChart($('main-chart'), { ...commonOpts, height: 380, width: $('main-chart').clientWidth || 800 });
   const candleSeries = mainChart.addCandlestickSeries({
     upColor: '#10b981', downColor: '#ef4444', borderUpColor: '#10b981', borderDownColor: '#ef4444',
     wickUpColor: '#10b981', wickDownColor: '#ef4444',
@@ -51,17 +63,22 @@
   const bbLower = mainChart.addLineSeries({ color: '#6b7280', lineWidth: 1, lineStyle: 2 });
   const bbMiddle = mainChart.addLineSeries({ color: '#9ca3af', lineWidth: 1, lineStyle: 2 });
 
-  const rsiChart = LC.createChart($('rsi-chart'), { ...commonOpts, height: 110 });
+  const rsiChart = LC.createChart($('rsi-chart'), { ...commonOpts, height: 110, width: $('rsi-chart').clientWidth || 800 });
   const rsiSeries = rsiChart.addLineSeries({ color: '#8b5cf6', lineWidth: 2, title: 'RSI14' });
   const rsiUpper = rsiChart.addLineSeries({ color: '#6b7280', lineWidth: 1, lineStyle: 2 });
   const rsiLower = rsiChart.addLineSeries({ color: '#6b7280', lineWidth: 1, lineStyle: 2 });
   rsiSeries.applyOptions({ autoscaleInfoProvider: () => ({ priceRange: { minValue: 0, maxValue: 100 } }) });
 
-  const macdChart = LC.createChart($('macd-chart'), { ...commonOpts, height: 110 });
+  const macdChart = LC.createChart($('macd-chart'), { ...commonOpts, height: 110, width: $('macd-chart').clientWidth || 800 });
   const macdSeries = macdChart.addLineSeries({ color: '#3b82f6', lineWidth: 2, title: 'MACD' });
   const macdSignal = macdChart.addLineSeries({ color: '#f59e0b', lineWidth: 2, title: 'Signal' });
   const macdHist = macdChart.addHistogramSeries({ priceFormat: { type: 'price' }, priceScaleId: 'hist' });
   macdChart.priceScale('hist').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
+
+  // Stage 12: responsive resize
+  attachResize(mainChart, $('main-chart'));
+  attachResize(rsiChart, $('rsi-chart'));
+  attachResize(macdChart, $('macd-chart'));
 
   // Sync time scales
   const charts = [mainChart, rsiChart, macdChart];
@@ -171,6 +188,19 @@
   }
 
   // =========================
+  // Dedup — lightweight-charts v4 silently rejects duplicate timestamps
+  // =========================
+  function dedupeCandles(candles) {
+    const map = new Map();
+    for (const c of candles) {
+      if (c && Number.isFinite(c.time)) {
+        map.set(c.time, c);  // last wins (newer data replaces older)
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.time - b.time);
+  }
+
+  // =========================
   // State
   // =========================
   const state = {
@@ -276,13 +306,43 @@
   // =========================
   // Data fetching
   // =========================
+  async function loadAvailableTimeframes() {
+    try {
+      const r = await fetch('/api/stats');
+      if (!r.ok) return;
+      const j = await r.json();
+      const byTf = j.byTimeframe || {};
+      const available = Object.keys(byTf).filter(tf => byTf[tf] > 0);
+      if (available.length === 0) {
+        addEvent('error', 'no candle data available yet — waiting for pipeline');
+        return;
+      }
+      const ORDER = ['1m', '5m', '15m', '1h', '4h', '1d', '1w', 'H3'];
+      const sorted = available.slice().sort((a, b) => {
+        const ia = ORDER.indexOf(a), ib = ORDER.indexOf(b);
+        return (ia < 0 ? 999 : ia) - (ib < 0 ? 999 : ib);
+      });
+      const preferred = sorted.includes('1m') ? '1m' : sorted[0];
+      const tfg = $('tfg');
+      if (tfg) {
+        tfg.innerHTML = sorted.map(tf =>
+          '<button data-tf="' + tf + '"' + (tf === preferred ? ' class="active"' : '') + '>' + tf + '</button>'
+        ).join('');
+        state.timeframe = preferred;
+      }
+      addEvent('quality', 'timeframes: ' + sorted.join(',') + ' (default: ' + preferred + ')');
+    } catch (e) {
+      console.warn('loadAvailableTimeframes failed:', e);
+    }
+  }
+
   async function loadCandles() {
     try {
       const r = await fetch('/api/candles?timeframe=' + state.timeframe + '&limit=500');
       if (!r.ok) throw new Error('status ' + r.status);
       const j = await r.json();
       if (state.debug) console.log('[falk] loaded', (j.candles || []).length, 'raw candles, sample:', (j.candles || [])[0]);
-      state.candles = (j.candles || []).map(normalizeCandle).filter(isValidCandle).sort((a, b) => a.time - b.time);
+      state.candles = dedupeCandles((j.candles || []).map(normalizeCandle).filter(isValidCandle));
       applyChartData();
       mainChart.timeScale().fitContent();
       rsiChart.timeScale().fitContent();
@@ -377,10 +437,7 @@
         const tf = ev.timeframe || '1m';
         const c = normalizeCandle(ev.data);
         if (tf === state.timeframe && c && isValidCandle(c)) {
-          const idx = state.candles.findIndex(x => x.time === c.time);
-          if (idx >= 0) state.candles[idx] = c;
-          else state.candles.push(c);
-          state.candles.sort((a, b) => a.time - b.time);
+          state.candles = dedupeCandles([...state.candles, c]);
           applyChartData();
         }
         addEvent('candle', tf + ' close=' + (c?.close ?? '—'));
@@ -425,9 +482,42 @@
   });
 
   // =========================
+  // Diagnostic (Stage 12): verify canvas rendering
+  // =========================
+  function diagnose() {
+    const container = $('main-chart');
+    if (!container) { console.error('[falk] #main-chart missing'); return; }
+    const rect = container.getBoundingClientRect();
+    const canvases = container.querySelectorAll('canvas');
+    const c0 = canvases[0];
+    console.log('[falk] main-chart:', {
+      containerW: rect.width,
+      containerH: rect.height,
+      canvasCount: canvases.length,
+      canvasW: c0 ? c0.width : null,
+      canvasH: c0 ? c0.height : null,
+      candleCount: state.candles.length,
+      timeframe: state.timeframe,
+    });
+    if (rect.width === 0 || rect.height === 0) {
+      console.error('[falk] CHART CONTAINER HAS ZERO SIZE — CSS issue');
+    }
+    if (canvases.length === 0) {
+      console.error('[falk] NO CANVAS — chart creation failed');
+    }
+    if (state.candles.length === 0) {
+      console.warn('[falk] no candles loaded — waiting for data');
+    }
+  }
+
+  // =========================
   // Init
   // =========================
-  loadCandles();
+  (async () => {
+    await loadAvailableTimeframes();
+    await loadCandles();
+    setTimeout(diagnose, 1000);
+  })();
   pollSession();
   pollHealth();
   pollWeekHistory();
@@ -435,4 +525,7 @@
   setInterval(pollHealth, 10_000);
   setInterval(pollWeekHistory, 60_000);
   connectWS();
+
+  // expose for manual inspection: window.falkDiag()
+  window.falkDiag = diagnose;
 })();

@@ -84,6 +84,20 @@ export class DashboardServer {
       }
       res.json({ days, history });
     });
+
+    // Stage 12: /api/timeframes
+    this.app.get('/api/timeframes', (_, res) => {
+      const counts: Record<string, number> = {};
+      for (const ev of this.candleHistory.values()) {
+        if (ev.type === 'candle') {
+          const tf = (ev as any).timeframe || '1m';
+          counts[tf] = (counts[tf] || 0) + 1;
+        }
+      }
+      const timeframes = Object.keys(counts).sort();
+      res.json({ timeframes, counts });
+    });
+
     // Stage 10: /api/candles
     this.app.get('/api/candles', (req, res) => {
       const tf = String(req.query.timeframe || '1m');
