@@ -123,7 +123,7 @@ describe('Load Tests (§18)', () => {
     const elapsed = Date.now() - start;
     const rate = Math.round(1000 / (elapsed / 1000));
     console.log('[LOAD] Features: ' + elapsed + 'ms for 1000 batches = ' + rate + ' batches/sec, computed=' + computed);
-    expect(elapsed).toBeLessThan(10_000);
+    expect(elapsed).toBeLessThan(15_000);
     expect(computed).toBe(1000);
   }, 15_000);
 

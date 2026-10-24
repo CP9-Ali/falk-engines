@@ -145,6 +145,12 @@ export interface GapAnalysis {
   readonly to: Timestamp;
   readonly duration_ms: number;
   readonly expected_candles: number;
+  /** Stage 4: number of candles during market-open (missing data) */
+  readonly open_candles: number;
+  /** Stage 4: number of candles during market-closed (expected absence) */
+  readonly closed_candles: number;
+  /** Stage 4: true if there is any open-market candle worth refetching */
+  readonly needs_refetch: boolean;
   readonly gap_type: GapType;
   readonly reason: string;
 }
@@ -159,36 +165,65 @@ export function classifyGap(
   const duration_ms = to.getTime() - from.getTime();
   const expected_candles = Math.max(0, Math.round(duration_ms / timeframeMs) - 1);
 
-  // §6.2: a gap that touches a UTC weekend day = expected market close
-  let touchesWeekend = false;
-  let cursor = new Date(from);
+  // Stage 4: walk each interior candle and classify it by market-open state.
+  // This replaces the pre-Stage-4 "touches UTC weekend" heuristic, which was
+  // wrong at Friday-evening (closed but weekday) and Sunday-evening (open but weekend).
+  let open_candles = 0;
+  let closed_candles = 0;
+  let touchesMarketClosed = false;
+  let cursor = new Date(from.getTime() + timeframeMs);
   let guard = 0;
-  while (cursor < to && guard < 20_000) {
-    const dow = cursor.getUTCDay();
-    if (dow === 6 || dow === 0) { touchesWeekend = true; break; }
+  while (cursor.getTime() < to.getTime() && guard < 50_000) {
+    const info = classifySession(cursor.toISOString());
+    if (info.is_market_open) {
+      open_candles++;
+    } else {
+      closed_candles++;
+      touchesMarketClosed = true;
+    }
     cursor = new Date(cursor.getTime() + timeframeMs);
     guard++;
   }
 
-  if (touchesWeekend && duration_ms <= 3 * 24 * 60 * 60 * 1000) {
+  const needs_refetch = open_candles > 0;
+
+  // Compat: preserve "weekend-spanning gap = EXPECTED" for reasonable durations.
+  if (touchesMarketClosed && duration_ms <= 3 * 24 * 60 * 60 * 1000) {
     return {
       from: fromUtc, to: toUtc, duration_ms, expected_candles,
+      open_candles, closed_candles, needs_refetch,
       gap_type: 'EXPECTED_MARKET_CLOSED',
-      reason: 'weekend close',
+      reason: spansUtcWeekend(from.getTime(), to.getTime())
+        ? 'weekend market close'
+        : 'market closed during gap',
     };
   }
 
   if (expected_candles > 60) {
     return {
       from: fromUtc, to: toUtc, duration_ms, expected_candles,
+      open_candles, closed_candles, needs_refetch,
       gap_type: 'UNEXPECTED_FEED_ERROR',
-      reason: 'gap > 60 candles without weekend',
+      reason: 'gap > 60 candles without market-closed period',
     };
   }
 
   return {
     from: fromUtc, to: toUtc, duration_ms, expected_candles,
+    open_candles, closed_candles, needs_refetch,
     gap_type: 'UNEXPECTED_FEED_ERROR',
-    reason: 'intraday gap',
+    reason: 'intraday gap during market-open hours',
   };
+}
+
+/** Stage 4: true if the UTC range [fromMs, toMs] covers any Sat/Sun day. */
+function spansUtcWeekend(fromMs: number, toMs: number): boolean {
+  const DAY_MS = 86_400_000;
+  const startDay = Math.floor(fromMs / DAY_MS);
+  const endDay = Math.floor(toMs / DAY_MS);
+  for (let d = startDay; d <= endDay; d++) {
+    const dow = new Date(d * DAY_MS).getUTCDay();
+    if (dow === 0 || dow === 6) return true;
+  }
+  return false;
 }

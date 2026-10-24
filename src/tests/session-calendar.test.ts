@@ -165,3 +165,71 @@ describe('Market open/close — DST aware (§7)', () => {
     expect(s.is_market_open).toBe(false);
   });
 });
+
+
+// =====================================================================
+// Stage 4: DST-aware classifyGap
+// =====================================================================
+
+describe('Gap Classifier — DST aware (§6.2 stage 4)', () => {
+  it('winter Fri 21:30-22:30 UTC: gap spans market close → EXPECTED', () => {
+    // Fri Jan 10 2025: NY EST close = 17:00 EST = 22:00 UTC
+    const fri2130 = new Date(Date.UTC(2025, 0, 10, 21, 30, 0)).toISOString();
+    const fri2230 = new Date(Date.UTC(2025, 0, 10, 22, 30, 0)).toISOString();
+    const g = classifyGap(fri2130, fri2230, 60_000);
+    expect(g.gap_type).toBe('EXPECTED_MARKET_CLOSED');
+    expect(g.open_candles).toBeGreaterThan(0);
+    expect(g.closed_candles).toBeGreaterThan(0);
+    expect(g.needs_refetch).toBe(true);
+  });
+
+  it('winter Sun 22:00-23:00 UTC: gap entirely in open market → UNEXPECTED', () => {
+    // Sun Jan 5 2025: NY EST open = 17:00 EST = 22:00 UTC
+    const sun2200 = new Date(Date.UTC(2025, 0, 5, 22, 0, 0)).toISOString();
+    const sun2300 = new Date(Date.UTC(2025, 0, 5, 23, 0, 0)).toISOString();
+    const g = classifyGap(sun2200, sun2300, 60_000);
+    expect(g.gap_type).toBe('UNEXPECTED_FEED_ERROR');
+    expect(g.closed_candles).toBe(0);
+    expect(g.open_candles).toBe(59);
+    expect(g.needs_refetch).toBe(true);
+  });
+
+  it('summer Fri 20:30-21:30 UTC: gap spans market close → EXPECTED', () => {
+    // Fri Jul 11 2025: NY EDT close = 17:00 EDT = 21:00 UTC
+    const fri2030 = new Date(Date.UTC(2025, 6, 11, 20, 30, 0)).toISOString();
+    const fri2130 = new Date(Date.UTC(2025, 6, 11, 21, 30, 0)).toISOString();
+    const g = classifyGap(fri2030, fri2130, 60_000);
+    expect(g.gap_type).toBe('EXPECTED_MARKET_CLOSED');
+    expect(g.open_candles).toBeGreaterThan(0);
+    expect(g.closed_candles).toBeGreaterThan(0);
+  });
+
+  it('summer Sun 21:00-22:00 UTC: gap entirely in open market → UNEXPECTED', () => {
+    // Sun Jul 6 2025: NY EDT open = 17:00 EDT = 21:00 UTC
+    const sun2100 = new Date(Date.UTC(2025, 6, 6, 21, 0, 0)).toISOString();
+    const sun2200 = new Date(Date.UTC(2025, 6, 6, 22, 0, 0)).toISOString();
+    const g = classifyGap(sun2100, sun2200, 60_000);
+    expect(g.gap_type).toBe('UNEXPECTED_FEED_ERROR');
+    expect(g.closed_candles).toBe(0);
+  });
+
+  it('winter weekend gap: needs_refetch true (2h Sunday tail open)', () => {
+    const fri22 = new Date(Date.UTC(2025, 0, 3, 22, 0, 0)).toISOString();
+    const mon00 = new Date(Date.UTC(2025, 0, 6, 0, 0, 0)).toISOString();
+    const g = classifyGap(fri22, mon00, 60_000);
+    expect(g.gap_type).toBe('EXPECTED_MARKET_CLOSED');
+    expect(g.needs_refetch).toBe(true);
+    expect(g.open_candles).toBe(120); // 2h of Sunday evening open market
+    expect(g.closed_candles).toBeGreaterThan(2000);
+  });
+
+  it('pure market-closed gap: needs_refetch false', () => {
+    // Sat Jan 4 12:00 → Sun Jan 5 12:00 (all weekend, no open market)
+    const sat12 = new Date(Date.UTC(2025, 0, 4, 12, 0, 0)).toISOString();
+    const sun12 = new Date(Date.UTC(2025, 0, 5, 12, 0, 0)).toISOString();
+    const g = classifyGap(sat12, sun12, 60_000);
+    expect(g.gap_type).toBe('EXPECTED_MARKET_CLOSED');
+    expect(g.open_candles).toBe(0);
+    expect(g.needs_refetch).toBe(false);
+  });
+});
