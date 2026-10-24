@@ -27,6 +27,16 @@
     <div class="cell"><span class="label">Week Close</span><span class="v mono" id="sess-close">—</span></div>
   </section>
 
+  
+  <nav class="tabs" id="tabs">
+    <button data-tab="charts" class="tab active" type="button">Charts</button>
+    <button data-tab="fusion" class="tab" type="button">Fusion</button>
+    <button data-tab="backtest" class="tab" type="button">Backtest</button>
+    <button data-tab="sources" class="tab" type="button">Sources</button>
+    <button data-tab="quality" class="tab" type="button">Quality</button>
+    <button data-tab="alerts" class="tab" type="button">Alerts</button>
+  </nav>
+
   <section class="stats">
     <div class="stat"><span class="label">Price</span><span class="v" id="price">—</span><span class="s" id="price-change">—</span></div>
     <div class="stat"><span class="label">24h High</span><span class="v mono" id="high24">—</span></div>
@@ -36,7 +46,10 @@
     <div class="stat"><span class="label">Fusion</span><span class="v" id="fusion">—</span></div>
     <div class="stat"><span class="label">Candles</span><span class="v" id="count">0</span></div>
     <div class="stat"><span class="label">Sources</span><span class="v" id="sources">0</span></div>
+      <div class="stat"><span class="label">Alerts</span><span class="v" id="alerts">?</span></div>
   </section>
+
+  <section data-panel="charts" class="panel active">
 
   <section class="chart-wrap">
     <div class="toolbar">
@@ -46,6 +59,7 @@
         <button data-tf="5m">5m</button>
         <button data-tf="15m">15m</button>
         <button data-tf="1h">1h</button>
+        <button data-tf="H3">H3</button>
         <button data-tf="4h">4h</button>
         <button data-tf="1d">1d</button>
         <button data-tf="1w">1w</button>
@@ -55,6 +69,7 @@
       <label class="tg"><input type="checkbox" id="ind-ema" checked> <span>EMA50</span></label>
       <label class="tg"><input type="checkbox" id="ind-bb"> <span>BB</span></label>
       <label class="tg"><input type="checkbox" id="ind-vol" checked> <span>Vol</span></label>
+      <label class="tg"><input type="checkbox" id="ind-atr"> <span>ATR</span></label>
       <span class="spacer"></span>
       <button id="btn-fit">Fit</button>
       <span class="count" id="chart-count">0 bars</span>
@@ -74,6 +89,69 @@
       <ul id="events"><li class="empty">waiting for events…</li></ul>
     </div>
   </section>
+  </section>
+
+  <section data-panel="fusion" class="panel">
+    <div class="panel-head">
+      <h2>Fusion Report <span class="muted">?8</span></h2>
+      <span class="status-pill unk" id="fusion-status">?</span>
+    </div>
+    <div class="panel-empty" id="fusion-empty">No fusion reports yet. POST to /api/reports/fusion.</div>
+    <div class="panel-body" id="fusion-body" hidden>
+      <div class="summary-grid">
+        <div class="cell"><span class="label">REPORT</span><span class="v mono" id="f-report">?</span></div>
+        <div class="cell"><span class="label">AS-OF (UTC)</span><span class="v mono" id="f-asof">?</span></div>
+        <div class="cell"><span class="label">POLICY</span><span class="v" id="f-policy">?</span></div>
+        <div class="cell"><span class="label">SOURCES USED</span><span class="v mono" id="f-sources">?</span></div>
+        <div class="cell"><span class="label">INDEPENDENT EVIDENCE</span><span class="v mono" id="f-evidence">?</span></div>
+        <div class="cell"><span class="label">SENSITIVE USE</span><span class="v" id="f-sensitive">?</span></div>
+      </div>
+      <h3>Deltas (?P)</h3>
+      <div id="f-deltas-wrap"></div>
+      <h3>Raw Sources (unmodified)</h3>
+      <div id="f-raw-wrap"></div>
+    </div>
+  </section>
+
+  <section data-panel="backtest" class="panel">
+    <div class="panel-head">
+      <h2>Backtest Result <span class="muted">?9</span></h2>
+      <span class="mono muted" id="bt-config">?</span>
+    </div>
+    <div class="panel-empty" id="bt-empty">No backtest results yet. POST to /api/reports/backtest.</div>
+    <div class="panel-body" id="bt-body" hidden>
+      <div class="metric-grid">
+        <div class="metric"><span class="label">SHARPE</span><span class="v mono" id="bt-sharpe">?</span></div>
+        <div class="metric"><span class="label">SORTINO</span><span class="v mono" id="bt-sortino">?</span></div>
+        <div class="metric"><span class="label">PROFIT FACTOR</span><span class="v mono" id="bt-pf">?</span></div>
+        <div class="metric"><span class="label">WIN RATE</span><span class="v mono" id="bt-wr">?</span></div>
+        <div class="metric"><span class="label">MAX DRAWDOWN</span><span class="v mono" id="bt-dd">?</span></div>
+        <div class="metric"><span class="label">TRADES</span><span class="v mono" id="bt-trades">?</span></div>
+        <div class="metric"><span class="label">FINAL EQUITY</span><span class="v mono" id="bt-equity">?</span></div>
+        <div class="metric"><span class="label">TOTAL FEES</span><span class="v mono" id="bt-fees">?</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section data-panel="sources" class="panel">
+    <div class="panel-head"><h2>Source Health <span class="muted">?2 ?5 ?6</span></h2></div>
+    <div class="panel-empty" id="src-empty">Sources appear from the latest fusion report.</div>
+    <div id="src-wrap"></div>
+  </section>
+
+  <section data-panel="quality" class="panel">
+    <div class="panel-head"><h2>Data Quality <span class="muted">?9</span></h2></div>
+    <div class="panel-empty" id="q-empty">Quality checks appear when the pipeline emits them.</div>
+    <div id="q-wrap"></div>
+  </section>
+
+  <section data-panel="alerts" class="panel">
+    <div class="panel-head"><h2>Active Alerts <span class="muted">?10</span></h2></div>
+    <div class="panel-empty" id="a-empty">No active alerts.</div>
+    <div id="a-wrap"></div>
+  </section>
+
+  
 
   <script src="/app.js"></script>
 </body>

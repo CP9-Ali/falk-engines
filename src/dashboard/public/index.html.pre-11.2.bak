@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FALK · XAUUSD Trading Dashboard</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+</head>
+<body>
+  <header>
+    <div>
+      <h1>FALK · XAUUSD Dashboard</h1>
+      <div class="subtitle">real-time · session-aware · DST-correct</div>
+    </div>
+    <div class="status">
+      <span class="dot" id="conn-dot"></span>
+      <span id="conn-status">connecting…</span>
+    </div>
+  </header>
+
+  <section class="session-bar">
+    <div class="cell"><span class="label">Session</span><span class="v" id="sess-name">—</span></div>
+    <div class="cell"><span class="label">Market</span><span class="v" id="sess-market">—</span></div>
+    <div class="cell"><span class="label">Next</span><span class="v" id="sess-next">—</span><span class="s" id="sess-next-sub"></span></div>
+    <div class="cell"><span class="label">Week Open</span><span class="v mono" id="sess-open">—</span></div>
+    <div class="cell"><span class="label">Week Close</span><span class="v mono" id="sess-close">—</span></div>
+  </section>
+
+  <section class="stats">
+    <div class="stat"><span class="label">Price</span><span class="v" id="price">—</span><span class="s" id="price-change">—</span></div>
+    <div class="stat"><span class="label">24h High</span><span class="v mono" id="high24">—</span></div>
+    <div class="stat"><span class="label">24h Low</span><span class="v mono" id="low24">—</span></div>
+    <div class="stat"><span class="label">24h Volume</span><span class="v mono" id="vol24">—</span></div>
+    <div class="stat"><span class="label">Quality</span><span class="v" id="quality">—</span></div>
+    <div class="stat"><span class="label">Fusion</span><span class="v" id="fusion">—</span></div>
+    <div class="stat"><span class="label">Candles</span><span class="v" id="count">0</span></div>
+    <div class="stat"><span class="label">Sources</span><span class="v" id="sources">0</span></div>
+  </section>
+
+  <section class="chart-wrap">
+    <div class="toolbar">
+      <span class="tlabel">TF</span>
+      <div class="tfg" id="tfg">
+        <button data-tf="1m" class="active">1m</button>
+        <button data-tf="5m">5m</button>
+        <button data-tf="15m">15m</button>
+        <button data-tf="1h">1h</button>
+        <button data-tf="4h">4h</button>
+        <button data-tf="1d">1d</button>
+        <button data-tf="1w">1w</button>
+      </div>
+      <span class="tlabel">Indicators</span>
+      <label class="tg"><input type="checkbox" id="ind-sma" checked> <span>SMA20</span></label>
+      <label class="tg"><input type="checkbox" id="ind-ema" checked> <span>EMA50</span></label>
+      <label class="tg"><input type="checkbox" id="ind-bb"> <span>BB</span></label>
+      <label class="tg"><input type="checkbox" id="ind-vol" checked> <span>Vol</span></label>
+      <span class="spacer"></span>
+      <button id="btn-fit">Fit</button>
+      <span class="count" id="chart-count">0 bars</span>
+    </div>
+    <div id="main-chart" class="chart-main"></div>
+    <div id="rsi-chart" class="chart-sub"></div>
+    <div id="macd-chart" class="chart-sub"></div>
+  </section>
+
+  <section class="two-col">
+    <div class="panel">
+      <h2>Weekly Session History</h2>
+      <div id="week-hist" class="week-hist"></div>
+    </div>
+    <div class="panel">
+      <h2>Recent Events</h2>
+      <ul id="events"><li class="empty">waiting for events…</li></ul>
+    </div>
+  </section>
+
+  <script src="/app.js"></script>
+</body>
+</html>

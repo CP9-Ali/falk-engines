@@ -8,6 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 import { currentSessionUtcBounds, classifySession } from '../calendar/session-calendar';
 
+import { reportsStore } from './reports-store';
 export type DashboardEvent =
   | { type: 'tick'; data: { source: string; price: number; ts: string } }
   | { type: 'candle'; timeframe?: string; data: any; status?: string }
@@ -28,6 +29,7 @@ export class DashboardServer {
   private replayCount = 0;
 
   constructor(private port = 3000) {
+    this.app.use(express.json({ limit: '2mb' }));
     this.app.use(express.static(join(__dirname, 'public')));
     this.app.get('/health', (_, res) => res.json({
       ok: true,
@@ -159,6 +161,57 @@ export class DashboardServer {
         });
       }
       res.json({ total: this.candleHistory.size, samples: out });
+    });
+
+    
+    // ?11.1 ? Reports endpoints (fusion / backtest)
+    this.app.get('/api/reports/summary', (_, res) => {
+      res.json({
+        fusion: reportsStore.getFusionLatest(),
+        backtest: reportsStore.getBacktestLatest(),
+        counts: reportsStore.size(),
+        server_time_utc: new Date().toISOString(),
+      });
+    });
+
+    this.app.get('/api/reports/fusion/latest', (_, res) => {
+      res.json(reportsStore.getFusionLatest());
+    });
+
+    this.app.get('/api/reports/fusion', (req, res) => {
+      const n = Number(req.query.limit);
+      const limit = Number.isFinite(n) ? Math.max(0, n) : undefined;
+      res.json(reportsStore.getFusionAll(limit));
+    });
+
+    this.app.get('/api/reports/backtest/latest', (_, res) => {
+      res.json(reportsStore.getBacktestLatest());
+    });
+
+    this.app.get('/api/reports/backtest', (req, res) => {
+      const n = Number(req.query.limit);
+      const limit = Number.isFinite(n) ? Math.max(0, n) : undefined;
+      res.json(reportsStore.getBacktestAll(limit));
+    });
+
+    this.app.post('/api/reports/fusion', (req, res) => {
+      const body = req.body;
+      if (!body || typeof body !== 'object' || typeof body.report_id !== 'string') {
+        res.status(400).json({ error: 'expected FusionReport body with report_id' });
+        return;
+      }
+      reportsStore.pushFusion(body);
+      res.json({ ok: true, size: reportsStore.size() });
+    });
+
+    this.app.post('/api/reports/backtest', (req, res) => {
+      const body = req.body;
+      if (!body || typeof body !== 'object' || typeof body.config_version !== 'string') {
+        res.status(400).json({ error: 'expected BacktestResult body with config_version' });
+        return;
+      }
+      reportsStore.pushBacktest(body);
+      res.json({ ok: true, size: reportsStore.size() });
     });
 
     this.wss.on('connection', (ws) => {
