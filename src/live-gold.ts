@@ -376,20 +376,37 @@ async function main() {
         }
       }
 
-      if (result.fused) {
+      if (result.fusedRaw) {
         try {
+          const fr = result.fusedRaw;
+          const provenance = fr.provenance ?? [];
+          const dropped = fr.droppedSources ?? [];
+          const raw_values = provenance.map((p) => ({
+            sourceId: p.sourceId,
+            field: 'close',
+            value: p.value.close,
+            status: 'USED' as const,
+            reason: 'within_tolerance',
+          }));
+          const sources_dropped = dropped.map((d) => ({ sourceId: d.sourceId, reason: d.reason }));
+          const totalSources = provenance.length + dropped.length;
           const frep = {
             report_id: 'frep-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
-            as_of_cutoff: cutoff,
-            policy_version: 'gold-multitf-v6',
+            as_of_cutoff: fr.asOfCutoff ?? cutoff,
+            policy_version: fr.policyVersion ?? 'gold-multitf-v6',
             engine_version: '1.0.0',
-            conflict_status: result.fused.conflictStatus as any,
-            fused_value: result.fused.value,
-            raw_values: [],
+            conflict_status: fr.conflictStatus as any,
+            fused_value: fr.fusedValue?.close ?? null,
+            raw_values,
             deltas: [],
-            sources_used: 1,
-            sources_dropped: [],
-            source_counts: { total: 1, comparable: 0, blocked: 0, dropped_by_policy: 0 },
+            sources_used: provenance.length,
+            sources_dropped,
+            source_counts: {
+              total: totalSources,
+              comparable: provenance.length >= 2 ? provenance.length : 0,
+              blocked: 0,
+              dropped_by_policy: dropped.length,
+            },
           };
           reportsStore.pushFusion(frep);
           backup.takeSnapshot('INCREMENTAL', JSON.stringify({ kind: 'fusion-report', timeframe: tfLabel, report: frep }), 'fusion-reporter');

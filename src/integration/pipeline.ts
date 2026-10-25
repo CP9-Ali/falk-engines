@@ -1,6 +1,6 @@
-import type { AuditLog } from '../audit/audit-log';
+﻿import type { AuditLog } from '../audit/audit-log';
 import type { FeatureComputeResult, FeatureStatus } from '../feature-engineering/types';
-import type { FusionPolicy } from '../data-fusion/types';
+import type { FusionPolicy, FusionResult } from '../data-fusion/types';
 import type { QualityCheck, Candle } from '../data-quality/checks/base';
 import type { QualityVerdict } from '../data-quality/types';
 import type { ExecutionStatus, RawDataPoint, TaskState } from '../core/types';
@@ -39,6 +39,7 @@ export interface PipelineResult {
   readonly qualityBefore: ReadonlyArray<QualityVerdict>;
   readonly qualityAfter: QualityVerdict | null;
   readonly fused: { readonly value: number | null; readonly conflictStatus: string } | null;
+  readonly fusedRaw: FusionResult<{ close: number }> | null;
   readonly features: ReadonlyMap<string, FeatureComputeResult>;
   readonly auditEventCount: number;
   readonly errorMessage: string | null;
@@ -62,7 +63,7 @@ export function runPipeline(
     audit: AuditLog;
     auth: AuthorizationService;
     metrics?: MetricsRegistry;
-    /** Stage 8D: if true, block sources with unknown timezone (§7) */
+    /** Stage 8D: if true, block sources with unknown timezone (آ§7) */
     enforceTimeBlocking?: boolean;
   },
 ): PipelineResult {
@@ -209,6 +210,7 @@ export function runPipeline(
       taskId: input.taskId, finalState: task.getState(), executionStatus,
       qualityBefore, qualityAfter,
       fused: { value: fusedResult.fusedValue?.close ?? null, conflictStatus: fusedResult.conflictStatus },
+      fusedRaw: fusedResult,
       features,
       auditEventCount: deps.audit.readAll().length,
       errorMessage: null,
@@ -218,7 +220,7 @@ export function runPipeline(
     deps.metrics?.increment('pipeline.status.FAILED');
     return {
       taskId: input.taskId, finalState: task.getState(), executionStatus: 'FAILED',
-      qualityBefore: [], qualityAfter: null, fused: null, features: new Map(),
+      qualityBefore: [], qualityAfter: null, fused: null, fusedRaw: null, features: new Map(),
       auditEventCount: deps.audit.readAll().length,
       errorMessage: (err as Error).message,
     };

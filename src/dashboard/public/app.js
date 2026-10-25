@@ -89,7 +89,7 @@
 
   const macdChart = LC.createChart($('macd-chart'), { ...commonOpts, height: 110, width: $('macd-chart').clientWidth || 800 });
   const macdSeries = macdChart.addLineSeries({ color: '#3b82f6', lineWidth: 2, title: 'MACD' });
-  const macdSignal = macdChart.addLineSeries({ color: '#f59e0b', lineWidth: 2, title: 'Signal' });
+  const macdSignal = macdChart.addLineSeries({ color: CHART_COLORS.sma, lineWidth: 2, title: 'Signal' });
   const macdHist = macdChart.addHistogramSeries({ priceFormat: { type: 'price' }, priceScaleId: 'hist' });
   macdChart.priceScale('hist').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
 
