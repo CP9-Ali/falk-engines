@@ -1,7 +1,8 @@
-import WebSocket from 'ws';
+﻿import WebSocket from 'ws';
 import 'dotenv/config';
 import { runPipeline } from './integration/pipeline';
 import { DataFusionEngine } from './data-fusion/engine';
+import { reportsStore } from './dashboard/reports-store';
 import { ConflictLog } from './data-fusion/conflict-record';
 import { FeatureRegistry } from './feature-engineering/registry';
 import { makeSma20, makeRsi14, makeAtr14 } from './feature-engineering/financial';
@@ -107,9 +108,9 @@ async function main() {
   const alertMgr = new AlertManager(audit);
   const healthMon = new HealthMonitor(new RateLimitManager(), errorQueue, ['twelvedata-ws', 'binance-paxg', 'xaus-api']);
   const alertBridge = new AlertBridge(healthMon, alertMgr, 'live-runner', { pollMs: 60_000 });
-  // �5: unified connector + reference fetcher
+  // ï؟½5: unified connector + reference fetcher
   const connectors = new ConnectorManager();
-  // �5: register each source as a Connector
+  // ï؟½5: register each source as a Connector
   let tdSource: TwelveDataWsSource | null = null;
   connectors.register({
     source_id: 'twelvedata-ws',
@@ -127,12 +128,12 @@ async function main() {
   referenceFetcher.registerH3();
   await referenceFetcher.fetchBinancePaxg();
 
-  // �5: Scheduler � verify market state before historical fetch
+  // ï؟½5: Scheduler ï؟½ verify market state before historical fetch
   const scheduler = new Scheduler();
   const schedCheck = scheduler.shouldRun('history-fetch');
   console.log('[SCHEDULER] history-fetch: ' + (schedCheck.should_run ? 'allowed' : 'blocked') + ' (' + schedCheck.reason + ')');
   alertBridge.start();
-  // �5.1: GapFixer monitoring (logs detected gaps, no auto-refetch in live mode)
+  // ï؟½5.1: GapFixer monitoring (logs detected gaps, no auto-refetch in live mode)
   setInterval(() => {
     const errGaps = gapFixer.detectFromErrors();
     const histPoints = historiesByTf.get('1m') || [];
@@ -162,7 +163,7 @@ async function main() {
   setInterval(() => {
     const gaps = gapFixer.detectFromErrors();
     if (gaps.length > 0) {
-      gapFixer.fixAll(gaps, async () => []); // ��� ��ء ��� ����� ��� ������ ���
+      gapFixer.fixAll(gaps, async () => []); // ï؟½ï؟½ï؟½ ï؟½ï؟½ط، ï؟½ï؟½ï؟½ ï؟½ï؟½ï؟½ï؟½ï؟½ ï؟½ï؟½ï؟½ ï؟½ï؟½ï؟½ï؟½ï؟½ï؟½ ï؟½ï؟½ï؟½
     }
   }, 5 * 60_000);
   const eventIntel = new EventIntelligence({ pollMs: 5 * 60_000, highImpactWindowMs: 30 * 60_000 });
@@ -305,8 +306,8 @@ async function main() {
         qualityChecks: [
           structuralCheck, completenessCheck, schemaCheck,
           duplicateCheck, crossFieldCheck, missingCheck, timestampCheck,
-          precisionCheck, volumeSemanticsCheck, timezoneCheck,  // ← Stage 2
-          sessionGapCheck, volumeSanityCheck,                    // ← Stage 7
+          precisionCheck, volumeSemanticsCheck, timezoneCheck,  // â†گ Stage 2
+          sessionGapCheck, volumeSanityCheck,                    // â†گ Stage 7
         ],
         enforceTimeBlocking: true, featureRegistry: reg, audit, auth,
       });
@@ -392,6 +393,7 @@ async function main() {
             toleranceBps: 100,
             allowSourceSwitching: false,
           });
+          reportsStore.pushFusion(frep);
           backup.takeSnapshot('INCREMENTAL', JSON.stringify({ kind: 'fusion-report', timeframe: tfLabel, report: frep }), 'fusion-reporter');
         } catch { /* ignore */ }
       }
