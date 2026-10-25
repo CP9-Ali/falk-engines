@@ -142,3 +142,77 @@ describe('?11.0 ? createReportsStore', () => {
     reportsStore.clear();
   });
 });
+
+// ============================================================
+// §11.4 — Quality support (Phase 1)
+// ============================================================
+import type { QualityVerdict } from '../data-quality/types';
+
+const qvFixture: QualityVerdict = {
+  overallStatus: 'PASS',
+  findings: [],
+  suitableForTask: true,
+  suitable_for: { rsi_atr: true, volume_profile: true, source_comparison: true } as any,
+  dataReference: {
+    snapshotId: 'snap-1',
+    contentFingerprint: 'fp-1',
+    sourceId: 'src-1',
+    range: { from: '2026-01-01T00:00:00Z', to: '2026-01-01T01:00:00Z' },
+  } as any,
+  instrument: 'XAUUSD',
+  timeframe: '1h',
+  evaluatedAt: '2026-01-01T01:00:00Z' as any,
+  asOfCutoff: '2026-01-01T01:00:00Z' as any,
+  policyVersion: 'p1',
+  qualityRulesVersion: 'q1',
+  report: {} as any,
+};
+
+describe('ReportsStore — quality (§11.4)', () => {
+  it('pushQuality stores and getQualityLatest retrieves it', () => {
+    const s = createReportsStore();
+    s.pushQuality(qvFixture);
+    const stored = s.getQualityLatest();
+    expect(stored).not.toBeNull();
+    expect(stored!.verdict).toEqual(qvFixture);
+    expect(typeof stored!.stored_at).toBe('string');
+  });
+
+  it('getQualityLatest is null when empty', () => {
+    const s = createReportsStore();
+    expect(s.getQualityLatest()).toBeNull();
+  });
+
+  it('getQualityAll returns oldest-first and respects limit', () => {
+    const s = createReportsStore();
+    s.pushQuality({ ...qvFixture, timeframe: '1h' });
+    s.pushQuality({ ...qvFixture, timeframe: '4h' });
+    s.pushQuality({ ...qvFixture, timeframe: '1d' });
+    expect(s.getQualityAll().length).toBe(3);
+    const limited = s.getQualityAll(2);
+    expect(limited.length).toBe(2);
+    expect(limited[1].verdict.timeframe).toBe('1d');
+  });
+
+  it('pushQuality trims to maxHistory', () => {
+    const s = createReportsStore({ maxHistory: 2 });
+    s.pushQuality({ ...qvFixture, timeframe: '1h' });
+    s.pushQuality({ ...qvFixture, timeframe: '4h' });
+    s.pushQuality({ ...qvFixture, timeframe: '1d' });
+    expect(s.getQualityAll().length).toBe(2);
+    expect(s.getQualityLatest()!.verdict.timeframe).toBe('1d');
+  });
+
+  it('clear() removes quality entries too', () => {
+    const s = createReportsStore();
+    s.pushQuality(qvFixture);
+    s.clear();
+    expect(s.getQualityLatest()).toBeNull();
+  });
+
+  it('size() stays backward-compatible (no quality key)', () => {
+    const s = createReportsStore();
+    s.pushQuality(qvFixture);
+    expect(s.size()).toEqual({ fusion: 0, backtest: 0 });
+  });
+});
