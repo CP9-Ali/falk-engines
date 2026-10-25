@@ -396,6 +396,12 @@ async function main() {
         } catch { /* ignore */ }
       }
 
+      if (result.qualityAfter) {
+        try {
+          reportsStore.pushQuality(result.qualityAfter);
+        } catch { /* ignore */ }
+      }
+
       if (tfLabel === '1m' || tfLabel === '15m' || tfLabel === '1h') {
         const snap = backup.takeSnapshot('INCREMENTAL', JSON.stringify({
           timeframe: tfLabel,
