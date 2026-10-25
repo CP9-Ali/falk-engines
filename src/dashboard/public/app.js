@@ -27,13 +27,28 @@
     return;
   }
   const LC = LightweightCharts;
+  const CHART_COLORS = (() => {
+    const cs = getComputedStyle(document.documentElement);
+    const get = (n, fb) => (cs.getPropertyValue(n).trim() || fb);
+    return {
+      bg:     get('--panel2', '#0f172a'),
+      text:   get('--text',   '#9ca3af'),
+      border: get('--border', '#1f2937'),
+      cross:  get('--muted',  '#4b5563'),
+      up:     get('--green',  '#10b981'),
+      down:   get('--red',    '#ef4444'),
+      vol:    get('--muted',  '#374151'),
+      sma:    get('--accent', '#f59e0b'),
+      bb:     get('--text',   '#9ca3af'),
+    };
+  })();
 
   const commonOpts = {
-    layout: { background: { color: '#0f172a' }, textColor: '#9ca3af', fontSize: 10 },
-    grid: { vertLines: { color: '#1f2937' }, horzLines: { color: '#1f2937' } },
-    timeScale: { timeVisible: true, secondsVisible: false, borderColor: '#1f2937', rightOffset: 5 },
-    rightPriceScale: { borderColor: '#1f2937', scaleMargins: { top: 0.1, bottom: 0.1 } },
-    crosshair: { mode: 1, vertLine: { color: '#4b5563', width: 1, style: 2 }, horzLine: { color: '#4b5563', width: 1, style: 2 } },
+    layout: { background: { color: CHART_COLORS.bg }, textColor: CHART_COLORS.text, fontSize: 10 },
+    grid: { vertLines: { color: CHART_COLORS.border }, horzLines: { color: CHART_COLORS.border } },
+    timeScale: { timeVisible: true, secondsVisible: false, borderColor: CHART_COLORS.border, rightOffset: 5 },
+    rightPriceScale: { borderColor: CHART_COLORS.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
+    crosshair: { mode: 1, vertLine: { color: CHART_COLORS.cross, width: 1, style: 2 }, horzLine: { color: CHART_COLORS.cross, width: 1, style: 2 } },
   };
 
   function attachResize(chart, container) {
@@ -50,18 +65,18 @@
 
   const mainChart = LC.createChart($('main-chart'), { ...commonOpts, height: 380, width: $('main-chart').clientWidth || 800 });
   const candleSeries = mainChart.addCandlestickSeries({
-    upColor: '#10b981', downColor: '#ef4444', borderUpColor: '#10b981', borderDownColor: '#ef4444',
-    wickUpColor: '#10b981', wickDownColor: '#ef4444',
+    upColor: CHART_COLORS.up, downColor: CHART_COLORS.down, borderUpColor: CHART_COLORS.up, borderDownColor: CHART_COLORS.down,
+    wickUpColor: CHART_COLORS.up, wickDownColor: CHART_COLORS.down,
   });
   const volumeSeries = mainChart.addHistogramSeries({
-    priceFormat: { type: 'volume' }, priceScaleId: 'vol', color: '#374151',
+    priceFormat: { type: 'volume' }, priceScaleId: 'vol', color: CHART_COLORS.vol,
   });
   mainChart.priceScale('vol').applyOptions({ scaleMargins: { top: 0.8, bottom: 0 } });
-  const sma20Series = mainChart.addLineSeries({ color: '#f59e0b', lineWidth: 2, title: 'SMA20' });
+  const sma20Series = mainChart.addLineSeries({ color: CHART_COLORS.sma, lineWidth: 2, title: 'SMA20' });
   const ema50Series = mainChart.addLineSeries({ color: '#3b82f6', lineWidth: 2, title: 'EMA50' });
   const bbUpper = mainChart.addLineSeries({ color: '#6b7280', lineWidth: 1, lineStyle: 2 });
   const bbLower = mainChart.addLineSeries({ color: '#6b7280', lineWidth: 1, lineStyle: 2 });
-  const bbMiddle = mainChart.addLineSeries({ color: '#9ca3af', lineWidth: 1, lineStyle: 2 });
+  const bbMiddle = mainChart.addLineSeries({ color: CHART_COLORS.bb, lineWidth: 1, lineStyle: 2 });
 
   const atrSeries = mainChart.addLineSeries({ color: '#06b6d4', lineWidth: 1, lineStyle: 2, title: 'ATR', priceScaleId: 'atr', lastValueVisible: false, priceLineVisible: false });
   mainChart.priceScale('atr').applyOptions({ scaleMargins: { top: 0.05, bottom: 0.05 }, visible: false });
