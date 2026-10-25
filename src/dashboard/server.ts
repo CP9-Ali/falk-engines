@@ -1,4 +1,4 @@
-import express from 'express';
+﻿import express from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'node:http';
 import { join, dirname } from 'node:path';
@@ -143,7 +143,7 @@ export class DashboardServer {
 
 
 
-    // Stage 10.2: /api/candles/debug — inspect raw candle shape
+    // Stage 10.2: /api/candles/debug â€” inspect raw candle shape
     this.app.get('/api/candles/debug', (_, res) => {
       const out: any[] = [];
       for (const ev of this.candleHistory.values()) {
@@ -169,6 +169,7 @@ export class DashboardServer {
       res.json({
         fusion: reportsStore.getFusionLatest(),
         backtest: reportsStore.getBacktestLatest(),
+        quality: reportsStore.getQualityLatest(),
         counts: reportsStore.size(),
         server_time_utc: new Date().toISOString(),
       });
@@ -214,6 +215,26 @@ export class DashboardServer {
       res.json({ ok: true, size: reportsStore.size() });
     });
 
+    // §11.4 — Quality endpoints
+    this.app.get('/api/quality/latest', (_, res) => {
+      res.json(reportsStore.getQualityLatest());
+    });
+
+    this.app.get('/api/quality', (req, res) => {
+      const n = Number(req.query.limit);
+      const limit = Number.isFinite(n) ? Math.max(0, n) : undefined;
+      res.json(reportsStore.getQualityAll(limit));
+    });
+
+    this.app.post('/api/quality', (req, res) => {
+      const body = req.body;
+      if (!body || typeof body !== 'object' || typeof body.overallStatus !== 'string') {
+        res.status(400).json({ error: 'expected QualityVerdict body with overallStatus' });
+        return;
+      }
+      reportsStore.pushQuality(body);
+      res.json({ ok: true, size: reportsStore.size() });
+    });
     this.wss.on('connection', (ws) => {
       this.clients.add(ws);
       for (const ev of this.candleHistory.values()) {
