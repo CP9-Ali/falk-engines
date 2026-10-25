@@ -8,6 +8,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 import { currentSessionUtcBounds, classifySession } from '../calendar/session-calendar';
 
+import type { AvailabilityReport } from '../multi-timeframe/availability';
 import { reportsStore } from './reports-store';
 export type DashboardEvent =
   | { type: 'tick'; data: { source: string; price: number; ts: string } }
@@ -15,6 +16,7 @@ export type DashboardEvent =
   | { type: 'feature'; timeframe?: string; data: { name: string; value: number | null } }
   | { type: 'quality'; timeframe?: string; data: { status: string; suitable: boolean; volume_semantics?: string } }
   | { type: 'fusion'; timeframe?: string; data: { value: number | null; conflict: string } }
+  | { type: 'availability'; timeframe?: string; data: AvailabilityReport }
   | { type: 'task'; timeframe?: string; data: { state: string; exec: string } }
   | { type: 'worm'; data: { id: string; total: number; last: string } }
   | { type: 'error'; timeframe?: string; data: { message: string } };

@@ -34,6 +34,7 @@ import { RunContextStore } from './replay/run-context';
 import { HistoryRestorer } from './ingestion/history-restorer';
 import { EngineResultsLog } from './replay/engine-results';
 import { H3Aggregator } from './ingestion/h3-aggregator';
+import { computeAvailability } from './multi-timeframe/availability';
 import { GapFixer } from './ingestion/gap-fixer';
 import { ErrorQueue } from './ingestion/error-queue';
 import { RateLimitManager } from './ingestion/rate-limiter';
@@ -246,6 +247,21 @@ async function main() {
         return;
       }
       registry.markSuccess(point.sourceId);
+
+      // §13 — Availability report (provisional while forming, final at close)
+      try {
+        const availTfMs = tfLabel === 'H3'
+          ? H3_MS
+          : (TIMEFRAMES.find((t) => t.label === tfLabel)?.ms ?? 60_000);
+        void availTfMs; // reserved for future missing-children detection
+        const availReport = computeAvailability({
+          timeframe: tfLabel,
+          open_utc: point.eventTime,
+          now_utc: cutoff,
+          source: tfLabel === 'H3' ? 'derived' : 'source',
+        });
+        dashboard.broadcast({ type: 'availability', timeframe: tfLabel, data: availReport });
+      } catch { /* availability is non-critical */ }
       let aggComparison = '';
       const sessionInfo = classifySession(point.eventTime);
       if (tfLabel === '5m' || tfLabel === '15m' || tfLabel === '1h' || tfLabel === '4h') {

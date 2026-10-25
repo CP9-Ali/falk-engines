@@ -12,6 +12,7 @@ export interface AvailabilityReport {
 }
 
 const TF_MS: Record<string, number> = {
+  // Canonical (uppercase + digit)
   M1: 60_000,
   M5: 5 * 60_000,
   M15: 15 * 60_000,
@@ -20,6 +21,17 @@ const TF_MS: Record<string, number> = {
   H4: 4 * 60 * 60_000,
   D1: 24 * 60 * 60_000,
   W1: 7 * 24 * 60 * 60_000,
+  // Aliases used by live-gold / TwelveData
+  '1m': 60_000,
+  '5m': 5 * 60_000,
+  '15m': 15 * 60_000,
+  '30m': 30 * 60_000,
+  '1h': 60 * 60_000,
+  H3: 3 * 60 * 60_000,
+  '3h': 3 * 60 * 60_000,
+  '4h': 4 * 60 * 60_000,
+  '1d': 24 * 60 * 60_000,
+  '1w': 7 * 24 * 60 * 60_000,
 };
 
 export function timeframeMs(tf: string): number {
