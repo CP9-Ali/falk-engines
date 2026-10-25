@@ -216,3 +216,75 @@ describe('ReportsStore â€” quality (آ§11.4)', () => {
     expect(s.size()).toEqual({ fusion: 0, backtest: 0 });
   });
 });
+
+describe('ReportsStore — features + availability (B3a)', () => {
+  const fFixture = {
+    featureId: 'sma_20_1m',
+    definitionVersion: '1.0.0',
+    status: 'VALID',
+    value: 4002.5,
+    metadata: { feature_id: 'sma_20_1m', status: 'final' },
+  } as any;
+
+  const aFixture = {
+    timeframe: '1m',
+    open_utc: '2026-01-01T10:00:00Z',
+    close_utc: '2026-01-01T10:01:00Z',
+    available_at_utc: '2026-01-01T10:01:00Z',
+    is_final: true,
+    source: 'source',
+    missing_children: 0,
+    conflicts: [],
+  } as any;
+
+  it('pushFeature stores and getFeatureLatest retrieves it', () => {
+    const s = createReportsStore();
+    s.pushFeature(fFixture);
+    const stored = s.getFeatureLatest();
+    expect(stored).not.toBeNull();
+    expect(stored!.result).toBe(fFixture);
+    expect(typeof stored!.stored_at).toBe('string');
+  });
+
+  it('getFeatureLatest is null when empty', () => {
+    const s = createReportsStore();
+    expect(s.getFeatureLatest()).toBeNull();
+  });
+
+  it('getFeatureAll respects limit (last N)', () => {
+    const s = createReportsStore();
+    s.pushFeature({ ...fFixture, featureId: 'sma_20_1m' });
+    s.pushFeature({ ...fFixture, featureId: 'rsi_14_1m' });
+    s.pushFeature({ ...fFixture, featureId: 'atr_14_1m' });
+    expect(s.getFeatureAll().length).toBe(3);
+    const limited = s.getFeatureAll(2);
+    expect(limited.length).toBe(2);
+    expect(limited[1]!.result.featureId).toBe('atr_14_1m');
+  });
+
+  it('pushFeature trims to maxHistory', () => {
+    const s = createReportsStore({ maxHistory: 2 });
+    s.pushFeature({ ...fFixture, featureId: 'a' });
+    s.pushFeature({ ...fFixture, featureId: 'b' });
+    s.pushFeature({ ...fFixture, featureId: 'c' });
+    expect(s.getFeatureAll().length).toBe(2);
+    expect(s.getFeatureLatest()!.result.featureId).toBe('c');
+  });
+
+  it('pushAvailability stores and getAvailabilityLatest retrieves it', () => {
+    const s = createReportsStore();
+    s.pushAvailability(aFixture);
+    const stored = s.getAvailabilityLatest();
+    expect(stored).not.toBeNull();
+    expect(stored!.report).toBe(aFixture);
+  });
+
+  it('clear() removes features and availability too', () => {
+    const s = createReportsStore();
+    s.pushFeature(fFixture);
+    s.pushAvailability(aFixture);
+    s.clear();
+    expect(s.getFeatureLatest()).toBeNull();
+    expect(s.getAvailabilityLatest()).toBeNull();
+  });
+});

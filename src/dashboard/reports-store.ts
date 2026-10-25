@@ -1,6 +1,8 @@
 ﻿import type { FusionReport } from '../data-fusion/types';
 import type { BacktestResult } from '../backtest/types';
 import type { QualityVerdict } from '../data-quality/types';
+import type { FeatureComputeResult } from '../feature-engineering/types';
+import type { AvailabilityReport } from '../multi-timeframe/availability';
 
 export interface StoredFusion {
   readonly report: FusionReport;
@@ -16,6 +18,15 @@ export interface StoredQuality {
   readonly verdict: QualityVerdict;
   readonly stored_at: string;
 }
+export interface StoredFeature {
+  readonly result: FeatureComputeResult;
+  readonly stored_at: string;
+}
+
+export interface StoredAvailability {
+  readonly report: AvailabilityReport;
+  readonly stored_at: string;
+}
 
 export interface ReportsStore {
   pushFusion(report: FusionReport): void;
@@ -27,6 +38,12 @@ export interface ReportsStore {
   getBacktestAll(limit?: number): StoredBacktest[];
   getQualityLatest(): StoredQuality | null;
   getQualityAll(limit?: number): StoredQuality[];
+  pushFeature(result: FeatureComputeResult): void;
+  pushAvailability(report: AvailabilityReport): void;
+  getFeatureLatest(): StoredFeature | null;
+  getFeatureAll(limit?: number): StoredFeature[];
+  getAvailabilityLatest(): StoredAvailability | null;
+  getAvailabilityAll(limit?: number): StoredAvailability[];
   clear(): void;
   size(): { fusion: number; backtest: number };
 }
@@ -45,6 +62,8 @@ export function createReportsStore(opts: ReportsStoreOptions = {}): ReportsStore
   const fusion: StoredFusion[] = [];
   const backtest: StoredBacktest[] = [];
   const quality: StoredQuality[] = [];
+  const features: StoredFeature[] = [];
+  const availability: StoredAvailability[] = [];
 
   function trim<T>(arr: T[]): void {
     while (arr.length > max) arr.shift();
@@ -84,10 +103,33 @@ export function createReportsStore(opts: ReportsStoreOptions = {}): ReportsStore
       const n = limit === undefined ? quality.length : Math.max(0, Math.min(limit, quality.length));
       return quality.slice(quality.length - n);
     },
-    clear() {
+    pushFeature(result) {
+      features.push({ result, stored_at: new Date().toISOString() });
+      trim(features);
+    },
+    pushAvailability(report) {
+      availability.push({ report, stored_at: new Date().toISOString() });
+      trim(availability);
+    },
+    getFeatureLatest() {
+      return features.length === 0 ? null : features[features.length - 1]!;
+    },
+    getFeatureAll(limit) {
+      const n = limit === undefined ? features.length : Math.max(0, Math.min(limit, features.length));
+      return features.slice(features.length - n);
+    },
+    getAvailabilityLatest() {
+      return availability.length === 0 ? null : availability[availability.length - 1]!;
+    },
+    getAvailabilityAll(limit) {
+      const n = limit === undefined ? availability.length : Math.max(0, Math.min(limit, availability.length));
+      return availability.slice(availability.length - n);
+    },    clear() {
       fusion.length = 0;
       backtest.length = 0;
       quality.length = 0;
+      features.length = 0;
+      availability.length = 0;
     },
     size() {
       return { fusion: fusion.length, backtest: backtest.length };
