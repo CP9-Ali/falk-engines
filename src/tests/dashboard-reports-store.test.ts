@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+﻿import { describe, it, expect } from 'vitest';
 import { createReportsStore, reportsStore } from '../dashboard/reports-store';
 import type { FusionReport } from '../data-fusion/types';
 import type { BacktestResult } from '../backtest/types';
@@ -144,7 +144,7 @@ describe('?11.0 ? createReportsStore', () => {
 });
 
 // ============================================================
-// §11.4 — Quality support (Phase 1)
+// آ§11.4 â€” Quality support (Phase 1)
 // ============================================================
 import type { QualityVerdict } from '../data-quality/types';
 
@@ -168,7 +168,7 @@ const qvFixture: QualityVerdict = {
   report: {} as any,
 };
 
-describe('ReportsStore — quality (§11.4)', () => {
+describe('ReportsStore â€” quality (آ§11.4)', () => {
   it('pushQuality stores and getQualityLatest retrieves it', () => {
     const s = createReportsStore();
     s.pushQuality(qvFixture);
@@ -191,7 +191,7 @@ describe('ReportsStore — quality (§11.4)', () => {
     expect(s.getQualityAll().length).toBe(3);
     const limited = s.getQualityAll(2);
     expect(limited.length).toBe(2);
-    expect(limited[1].verdict.timeframe).toBe('1d');
+    expect(limited[1]!.verdict.timeframe).toBe('1d');
   });
 
   it('pushQuality trims to maxHistory', () => {
