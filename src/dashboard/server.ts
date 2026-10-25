@@ -172,6 +172,8 @@ export class DashboardServer {
         fusion: reportsStore.getFusionLatest(),
         backtest: reportsStore.getBacktestLatest(),
         quality: reportsStore.getQualityLatest(),
+        features: reportsStore.getFeatureLatest(),
+        availability: reportsStore.getAvailabilityLatest(),
         counts: reportsStore.size(),
         server_time_utc: new Date().toISOString(),
       });
@@ -236,6 +238,23 @@ export class DashboardServer {
       }
       reportsStore.pushQuality(body);
       res.json({ ok: true, size: reportsStore.size() });
+    });
+    // B3b — Features + Availability endpoints
+    this.app.get('/api/features/latest', (_, res) => {
+      res.json(reportsStore.getFeatureLatest());
+    });
+    this.app.get('/api/features', (req, res) => {
+      const n = Number(req.query.limit);
+      const limit = Number.isFinite(n) ? Math.max(0, n) : undefined;
+      res.json(reportsStore.getFeatureAll(limit));
+    });
+    this.app.get('/api/availability/latest', (_, res) => {
+      res.json(reportsStore.getAvailabilityLatest());
+    });
+    this.app.get('/api/availability', (req, res) => {
+      const n = Number(req.query.limit);
+      const limit = Number.isFinite(n) ? Math.max(0, n) : undefined;
+      res.json(reportsStore.getAvailabilityAll(limit));
     });
     this.wss.on('connection', (ws) => {
       this.clients.add(ws);
