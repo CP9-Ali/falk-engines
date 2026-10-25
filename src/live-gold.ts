@@ -261,6 +261,7 @@ async function main() {
           source: tfLabel === 'H3' ? 'derived' : 'source',
         });
         dashboard.broadcast({ type: 'availability', timeframe: tfLabel, data: availReport });
+        reportsStore.pushAvailability(availReport);
       } catch { /* availability is non-critical */ }
       let aggComparison = '';
       const sessionInfo = classifySession(point.eventTime);
@@ -333,6 +334,10 @@ async function main() {
       const smaVal = typeof sma?.value === 'number' ? sma.value : null;
       const rsiVal = typeof rsi?.value === 'number' ? rsi.value : null;
       const atrVal = typeof atr?.value === 'number' ? atr.value : null;
+      // B3c — push feature results to reportsStore
+      if (sma) { try { reportsStore.pushFeature(sma); } catch { /* ignore */ } }
+      if (rsi) { try { reportsStore.pushFeature(rsi); } catch { /* ignore */ } }
+      if (atr) { try { reportsStore.pushFeature(atr); } catch { /* ignore */ } }
 
       // ?13: engine results per candle
       const nowIso = new Date().toISOString();
