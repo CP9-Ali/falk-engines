@@ -1,13 +1,13 @@
-(() => {
+﻿(() => {
   'use strict';
 
   // =========================
   // Utilities
   // =========================
   const $ = (id) => document.getElementById(id);
-  const fmtPrice = (v) => { if (v == null) return '—'; const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : '—'; };
-  const fmtVol = (v) => { if (v == null) return '—'; const n = Number(v); return Number.isFinite(n) ? n.toLocaleString() : '—'; };
-  const fmtUtc = (iso) => iso ? iso.replace('T', ' ').replace(/\.\d+Z$/, 'Z') : '—';
+  const fmtPrice = (v) => { if (v == null) return 'â€”'; const n = Number(v); return Number.isFinite(n) ? n.toFixed(2) : 'â€”'; };
+  const fmtVol = (v) => { if (v == null) return 'â€”'; const n = Number(v); return Number.isFinite(n) ? n.toLocaleString() : 'â€”'; };
+  const fmtUtc = (iso) => iso ? iso.replace('T', ' ').replace(/\.\d+Z$/, 'Z') : 'â€”';
   const fmtSec = (s) => {
     if (s == null || s < 0) return '';
     const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60);
@@ -211,7 +211,7 @@
   }
 
   // =========================
-  // Dedup — lightweight-charts v4 silently rejects duplicate timestamps
+  // Dedup â€” lightweight-charts v4 silently rejects duplicate timestamps
   // =========================
   function dedupeCandles(candles) {
     const map = new Map();
@@ -298,12 +298,12 @@
   function updateStats24h(cs) {
     cs = cs || state.candles;
     if (!cs || cs.length === 0) {
-      $('price').textContent = '—';
-      $('price-change').textContent = '—';
+      $('price').textContent = 'â€”';
+      $('price-change').textContent = 'â€”';
       $('price-change').style.color = '';
-      $('high24').textContent = '—';
-      $('low24').textContent = '—';
-      $('vol24').textContent = '—';
+      $('high24').textContent = 'â€”';
+      $('low24').textContent = 'â€”';
+      $('vol24').textContent = 'â€”';
       $('count').textContent = '0';
       return;
     }
@@ -338,7 +338,7 @@
       const byTf = j.byTimeframe || {};
       const available = Object.keys(byTf).filter(tf => byTf[tf] > 0);
       if (available.length === 0) {
-        addEvent('error', 'no candle data available yet — waiting for pipeline');
+        addEvent('error', 'no candle data available yet â€” waiting for pipeline');
         return;
       }
       const ORDER = ['1m', '5m', '15m', '1h', '4h', '1d', '1w', 'H3'];
@@ -381,9 +381,9 @@
       const r = await fetch('/session/now');
       if (!r.ok) throw new Error('status ' + r.status);
       const j = await r.json();
-      $('sess-name').textContent = j.session || '—';
+      $('sess-name').textContent = j.session || 'â€”';
       const open = !!j.is_market_open;
-      $('sess-market').textContent = open ? '● OPEN' : '○ CLOSED';
+      $('sess-market').textContent = open ? 'â—ڈ OPEN' : 'â—‹ CLOSED';
       $('sess-market').style.color = open ? 'var(--green)' : 'var(--muted)';
       $('sess-open').textContent = fmtUtc(j.open_utc);
       $('sess-close').textContent = fmtUtc(j.close_utc);
@@ -392,7 +392,7 @@
       } else if (!open && j.seconds_until_next_open != null) {
         $('sess-next').textContent = 'Opens in'; $('sess-next-sub').textContent = fmtSec(j.seconds_until_next_open);
       } else {
-        $('sess-next').textContent = '—'; $('sess-next-sub').textContent = '';
+        $('sess-next').textContent = 'â€”'; $('sess-next-sub').textContent = '';
       }
     } catch (e) { console.warn('session poll failed:', e); }
   }
@@ -448,7 +448,7 @@
     ws.onopen = () => { $('conn-dot').className = 'dot online'; $('conn-status').textContent = 'live'; };
     ws.onclose = () => {
       $('conn-dot').className = 'dot offline';
-      $('conn-status').textContent = 'disconnected — retrying…';
+      $('conn-status').textContent = 'disconnected â€” retryingâ€¦';
       setTimeout(connectWS, 3000);
     };
     ws.onerror = () => ws.close();
@@ -465,12 +465,12 @@
           state.candles = dedupeCandles([...state.candles, c]);
           applyChartData();
         }
-        addEvent('candle', tf + ' close=' + (c?.close ?? '—'));
+        addEvent('candle', tf + ' close=' + (c?.close ?? 'â€”'));
       } else if (ev.type === 'quality') {
-        $('quality').textContent = ev.data?.status ?? '—';
+        $('quality').textContent = ev.data?.status ?? 'â€”';
         addEvent('quality', ev.data?.status ?? '?');
       } else if (ev.type === 'fusion') {
-        $('fusion').textContent = ev.data?.value != null ? fmtPrice(ev.data.value) : (ev.data?.conflict ?? '—');
+        $('fusion').textContent = ev.data?.value != null ? fmtPrice(ev.data.value) : (ev.data?.conflict ?? 'â€”');
         addEvent('fusion', (ev.data?.value != null ? fmtPrice(ev.data.value) : '?') + ' ' + (ev.data?.conflict || ''));
       } else if (ev.type === 'error') {
         addEvent('error', ev.data?.message ?? '?');
@@ -525,13 +525,13 @@
       timeframe: state.timeframe,
     });
     if (rect.width === 0 || rect.height === 0) {
-      console.error('[falk] CHART CONTAINER HAS ZERO SIZE — CSS issue');
+      console.error('[falk] CHART CONTAINER HAS ZERO SIZE â€” CSS issue');
     }
     if (canvases.length === 0) {
-      console.error('[falk] NO CANVAS — chart creation failed');
+      console.error('[falk] NO CANVAS â€” chart creation failed');
     }
     if (state.candles.length === 0) {
-      console.warn('[falk] no candles loaded — waiting for data');
+      console.warn('[falk] no candles loaded â€” waiting for data');
     }
   }
 
@@ -544,6 +544,7 @@
       if (!r.ok) return;
       const j = await r.json();
       const fusion = j.fusion?.report;
+      const qualityVerdict = j.quality?.verdict;
 
       // Sources count
       const sEl = $('sources');
@@ -572,10 +573,16 @@
         }
       }
 
-      // Quality (derived from sensitive_use_blocked)
+      // Quality: read from quality.verdict if available, else derive from fusion
       const qEl = $('quality');
       if (qEl) {
-        if (fusion) {
+        if (qualityVerdict && qualityVerdict.overallStatus) {
+          const st = qualityVerdict.overallStatus;
+          qEl.textContent = st === 'PASS' ? 'OK'
+                          : st === 'PASS_WITH_WARNINGS' ? 'WARN'
+                          : 'FAIL';
+          qEl.className = 'v ' + (st === 'PASS' ? 'ok' : st === 'PASS_WITH_WARNINGS' ? 'warn' : 'crit');
+        } else if (fusion) {
           const blocked = typeof fusion.sensitive_use_blocked === 'boolean'
             ? fusion.sensitive_use_blocked
             : (fusion.conflict_status !== 'CONSISTENT' && fusion.conflict_status !== 'SKIPPED');
@@ -802,6 +809,51 @@
   }
 
   // ?? Fetch + poll ????????????????????????????????????????????
+  // §11.4 — Quality panel
+  function renderQuality(stored) {
+    const emptyEl = $('q-empty');
+    const wrapEl  = $('q-wrap');
+    if (!wrapEl) return;
+
+    if (!stored || !stored.verdict) {
+      if (emptyEl) emptyEl.hidden = false;
+      wrapEl.innerHTML = '';
+      return;
+    }
+
+    const v = stored.verdict;
+    if (emptyEl) emptyEl.hidden = true;
+
+    const cls = v.overallStatus === 'PASS' ? 'ok'
+              : v.overallStatus === 'PASS_WITH_WARNINGS' ? 'warn'
+              : 'crit';
+
+    const findings = (v.findings || []).map((f) => {
+      const check = f.check || f.checkId || f.id || '?';
+      const sev   = f.severity || f.level || f.status || '?';
+      const msg   = f.message || f.detail || f.reason || '?';
+      const fcls  = (sev === 'ERROR' || sev === 'FAIL') ? 'crit'
+                  : (sev === 'WARN' || sev === 'WARNING') ? 'warn'
+                  : 'ok';
+      return '<tr><td>' + check + '</td><td><span class="v ' + fcls + '">' + sev + '</span></td><td>' + msg + '</td></tr>';
+    }).join('');
+
+    const findingsTable = findings
+      ? '<table class="data-table"><thead><tr><th>Check</th><th>Severity</th><th>Message</th></tr></thead><tbody>' + findings + '</tbody></table>'
+      : '<div class="panel-empty">No findings.</div>';
+
+    wrapEl.innerHTML =
+      '<div class="panel-body">' +
+        '<div class="row">' +
+          '<div class="cell"><span class="label">STATUS</span><span class="v ' + cls + '">' + (v.overallStatus || '?') + '</span></div>' +
+          '<div class="cell"><span class="label">SUITABLE</span><span class="v">' + (v.suitableForTask ? 'YES' : 'NO') + '</span></div>' +
+          '<div class="cell"><span class="label">FINDINGS</span><span class="v">' + (v.findings ? v.findings.length : 0) + '</span></div>' +
+          '<div class="cell"><span class="label">TIMEFRAME</span><span class="v">' + (v.timeframe || '?') + '</span></div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="panel-head"><h3>Findings</h3></div>' +
+      findingsTable;
+  }
   async function refresh() {
     try {
       const res = await fetch('/api/reports/summary');
@@ -810,6 +862,7 @@
       renderFusion(data.fusion);
       renderBacktest(data.backtest);
       renderSources(data.fusion);
+      renderQuality(data.quality);
     } catch (e) {
       /* network blip ? retry on next tick */
     }
