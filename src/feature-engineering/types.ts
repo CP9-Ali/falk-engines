@@ -1,3 +1,4 @@
+﻿import type { FeatureMetadata } from './metadata';
 import type { LookaheadGuard } from '../core/time';
 import type { Timestamp } from '../core/types';
 
@@ -48,4 +49,5 @@ export interface FeatureComputeResult<T = unknown> {
   readonly range_check?: 'IN_RANGE' | 'OUT_OF_RANGE' | 'UNKNOWN';
   readonly snapshotRef: { readonly snapshotId: string; readonly contentFingerprint: string };
   readonly fusionPolicyVersion: string;
+  readonly metadata?: FeatureMetadata;
 }

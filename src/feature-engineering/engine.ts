@@ -1,8 +1,9 @@
-import type { AuditLog } from '../audit/audit-log';
+﻿import type { AuditLog } from '../audit/audit-log';
 import { FalkError } from '../core/errors';
 import { LookaheadGuard, now } from '../core/time';
 import type { Timestamp } from '../core/types';
 import type { FeatureComputeResult, FeatureDefinition } from './types';
+import { buildMetadata, type FeatureMetadata } from './metadata';
 import type { FeatureRegistry } from './registry';
 
 export interface BatchRequest {
@@ -37,13 +38,15 @@ export class FeatureEngineeringEngine {
         return !r || ['COMPUTATION_FAILED', 'INSUFFICIENT_INPUTS', 'UNAVAILABLE'].includes(r.status);
       });
       if (failedDep) {
-        results.set(featureId, this.makeEmpty(def, req, 'INSUFFICIENT_INPUTS', 'Dependency unavailable'));
+        const empty1 = this.makeEmpty(def, req, 'INSUFFICIENT_INPUTS', 'Dependency unavailable');
+        results.set(featureId, this.attachMetadata(empty1, def, req));
         continue;
       }
 
       const inputs = req.inputs.get(featureId);
       if (inputs === undefined) {
-        results.set(featureId, this.makeEmpty(def, req, 'INSUFFICIENT_INPUTS', 'Missing inputs'));
+        const empty2 = this.makeEmpty(def, req, 'INSUFFICIENT_INPUTS', 'Missing inputs');
+        results.set(featureId, this.attachMetadata(empty2, def, req));
         continue;
       }
 
@@ -88,9 +91,43 @@ export class FeatureEngineeringEngine {
         payload: { featureId, definitionVersion: def.definitionVersion, status: result.status },
       });
 
-      results.set(featureId, result);
+      results.set(featureId, this.attachMetadata(result, def, req));
     }
     return results;
+  }
+
+
+  private attachMetadata(result: FeatureComputeResult, def: FeatureDefinition, req: BatchRequest): FeatureComputeResult {
+    return { ...result, metadata: this.buildFeatureMetadata(def, req, result) };
+  }
+  private buildFeatureMetadata(def: FeatureDefinition, req: BatchRequest, result: FeatureComputeResult): FeatureMetadata {
+    const valueNum = typeof result.value === 
+      'number' ? result.value : null;
+    return buildMetadata({
+      feature_id: def.featureId,
+      feature_version: def.definitionVersion,
+      symbol: 'UNKNOWN',
+      timeframe: def.timeframe,
+      value: valueNum,
+      unit: def.unit,
+      calculated_at_utc: result.computedAt,
+      valid_at_utc: result.asOfCutoff,
+      parameters: def.parameters,
+      data_snapshot_id: req.snapshotRef.snapshotId,
+      status: this.mapFeatureStatus(result.status),
+      warnings: result.error ? [result.error] : [],
+      lineage: {
+        sources: [def.featureId],
+        derived_from: def.dependencies,
+      },
+    });
+  }
+
+  private mapFeatureStatus(status: string): 'final' | 'provisional' | 'missing' | 'failed' {
+    if (status === 'VALID') return 'final';
+    if (status === 'UNDER_VALIDATION') return 'provisional';
+    if (status === 'INSUFFICIENT_INPUTS' || status === 'UNAVAILABLE') return 'missing';
+    return 'failed';
   }
 
   computeAffected(req: BatchRequest, invalidatedFeatureIds: ReadonlySet<string>): ReadonlyMap<string, FeatureComputeResult> {
