@@ -484,6 +484,9 @@
       } else if (ev.type === 'quality') {
         $('quality').textContent = ev.data?.status ?? 'â€”';
         addEvent('quality', ev.data?.status ?? '?');
+      } else if (ev.type === 'availability') {
+        renderAvailability(ev.data);
+        addEvent('availability', (ev.data?.timeframe || '?') + ' ' + (ev.data?.is_final ? 'final' : 'live'));
       } else if (ev.type === 'fusion') {
         $('fusion').textContent = ev.data?.value != null ? fmtPrice(ev.data.value) : (ev.data?.conflict ?? 'â€”');
         addEvent('fusion', (ev.data?.value != null ? fmtPrice(ev.data.value) : '?') + ' ' + (ev.data?.conflict || ''));
@@ -869,6 +872,41 @@
       '<div class="panel-head"><h3>Findings</h3></div>' +
       findingsTable;
   }
+  // §12/§13 — Features + Availability
+  function renderFeatures(storedArr) {
+    const strip = $('feature-strip');
+    if (!strip) return;
+    if (!Array.isArray(storedArr) || storedArr.length === 0) {
+      strip.innerHTML = '<span class="muted">No feature values yet</span>';
+      return;
+    }
+    strip.innerHTML = storedArr.map((s) => {
+      const r = s.result || {};
+      const m = r.metadata || {};
+      const st = m.status || (r.status === 'VALID' ? 'final' : 'provisional');
+      const cls = st === 'final' ? 'ok' : st === 'provisional' ? 'warn' : 'crit';
+      const v = typeof r.value === 'number' ? r.value.toFixed(4) : '—';
+      return '<span class="feat">' +
+        '<b>' + (r.featureId || '?') + '</b> ' +
+        '<span class="feat-val mono">' + v + '</span> ' +
+        '<span class="v ' + cls + '">' + st + '</span>' +
+      '</span>';
+    }).join(' ');
+  }
+
+  function renderAvailability(report) {
+    const badge = $('avail-badge');
+    if (!badge) return;
+    if (!report) {
+      badge.textContent = '—';
+      badge.className = 'avail-badge';
+      badge.title = 'No availability report';
+      return;
+    }
+    badge.textContent = report.timeframe + ' ' + (report.is_final ? 'FINAL' : 'LIVE');
+    badge.className = 'avail-badge ' + (report.is_final ? 'ok' : 'warn');
+    badge.title = 'open=' + report.open_utc + ' close=' + report.close_utc + ' source=' + report.source;
+  }
   async function refresh() {
     try {
       const res = await fetch('/api/reports/summary');
@@ -878,6 +916,8 @@
       renderBacktest(data.backtest);
       renderSources(data.fusion);
       renderQuality(data.quality);
+      renderFeatures(data.features);
+      renderAvailability(data.availability && data.availability.report ? data.availability.report : null);
     } catch (e) {
       /* network blip ? retry on next tick */
     }

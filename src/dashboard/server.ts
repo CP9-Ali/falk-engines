@@ -172,7 +172,7 @@ export class DashboardServer {
         fusion: reportsStore.getFusionLatest(),
         backtest: reportsStore.getBacktestLatest(),
         quality: reportsStore.getQualityLatest(),
-        features: reportsStore.getFeatureLatest(),
+        features: reportsStore.getFeatureAll(5),
         availability: reportsStore.getAvailabilityLatest(),
         counts: reportsStore.size(),
         server_time_utc: new Date().toISOString(),
