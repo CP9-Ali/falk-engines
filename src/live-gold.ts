@@ -1,7 +1,6 @@
 ﻿import WebSocket from 'ws';
 import 'dotenv/config';
 import { runPipeline } from './integration/pipeline';
-import { DataFusionEngine } from './data-fusion/engine';
 import { reportsStore } from './dashboard/reports-store';
 import { ConflictLog } from './data-fusion/conflict-record';
 import { FeatureRegistry } from './feature-engineering/registry';
@@ -379,20 +378,19 @@ async function main() {
 
       if (result.fused) {
         try {
-          const frep = new DataFusionEngine(audit, '1.0').buildReport({
-            fusedValue: result.fused.value !== null ? { close: result.fused.value } : null,
-            conflictStatus: result.fused.conflictStatus as any,
-            provenance: [],
-            droppedSources: [],
-            asOfCutoff: cutoff,
-            policyVersion: 'gold-multitf-v6',
-          }, {
-            policyVersion: 'gold-multitf-v6',
-            priorityOrder: ['gold-xau', 'binance-paxg'],
-            conflictStrategy: 'STRICT_PRIORITY',
-            toleranceBps: 100,
-            allowSourceSwitching: false,
-          });
+          const frep = {
+            report_id: 'frep-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8),
+            as_of_cutoff: cutoff,
+            policy_version: 'gold-multitf-v6',
+            engine_version: '1.0.0',
+            conflict_status: result.fused.conflictStatus as any,
+            fused_value: result.fused.value,
+            raw_values: [],
+            deltas: [],
+            sources_used: 1,
+            sources_dropped: [],
+            source_counts: { total: 1, comparable: 0, blocked: 0, dropped_by_policy: 0 },
+          };
           reportsStore.pushFusion(frep);
           backup.takeSnapshot('INCREMENTAL', JSON.stringify({ kind: 'fusion-report', timeframe: tfLabel, report: frep }), 'fusion-reporter');
         } catch { /* ignore */ }
